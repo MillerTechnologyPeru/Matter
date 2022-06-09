@@ -20,10 +20,6 @@ public struct SetupPayload {
         self.init(MutableHandle(adoptingReference: ReferenceType()))
     }
     
-    internal init(_ cxxObject: ReferenceType.CXXObject) {
-        self.init(MutableHandle(adoptingReference: ReferenceType(cxxObject)))
-    }
-    
     public var version: UInt8 {
         get { handle.map { $0.version } }
         set { applyMutation { $0.version = newValue } }

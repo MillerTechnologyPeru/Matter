@@ -48,6 +48,8 @@ internal protocol MutableReferenceConvertible : ReferenceConvertible where Refer
     
     var handle : MutableHandle<ReferenceType> { get set }
     
+    init(_ handle: MutableHandle<ReferenceType>)
+    
     /// Apply a mutating closure to the reference type, regardless if it is mutable or immutable.
     ///
     /// This function performs the correct copy-on-write check for efficient mutation.
@@ -67,8 +69,11 @@ extension MutableReferenceConvertible {
     }
 }
 
-internal protocol CXXReferenceConvertible: ReferenceConvertible where Self.ReferenceType: CXXReference {
+extension MutableReferenceConvertible where Self.ReferenceType: CXXReference {
     
+    init(_ cxxObject: ReferenceType.CXXObject) {
+        self.init(MutableHandle(adoptingReference: ReferenceType(cxxObject)))
+    }
 }
 
 internal protocol CXXReference: AnyObject {
