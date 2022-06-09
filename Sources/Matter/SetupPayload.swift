@@ -7,7 +7,6 @@
 
 import Foundation
 @_implementationOnly import CMatter
-@_implementationOnly import std.string
 
 public struct SetupPayload {
     
