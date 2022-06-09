@@ -20,8 +20,10 @@ import Foundation
  */
 public struct MatterError: Error {
     
+    /// Underlying error code from Matter framework
     public typealias Code = MatterErrorCode
     
+    /// Error category
     public typealias Range = MatterErrorRange
     
     internal let object: ReferenceType
@@ -30,8 +32,8 @@ public struct MatterError: Error {
         self.object = object
     }
     
-    internal init(_ object: ReferenceType.CXXObject) {
-        self.object = ReferenceType(object)
+    internal init(_ cxxObject: ReferenceType.CXXObject) {
+        self.init(ReferenceType(cxxObject))
     }
     
     /**
@@ -41,11 +43,11 @@ public struct MatterError: Error {
      *  This is intended to be used only in foreign function interfaces.
      */
     internal init(_ code: Code) {
-        self.object = ReferenceType(code)
+        self.init(ReferenceType(code))
     }
     
     internal init(_ code: Code, range: Range, file: StaticString = #file, line: UInt = #line) {
-        self.object = ReferenceType(code, range: range, file: file, line: line)
+        self.init(ReferenceType(code, range: range, file: file, line: line))
     }
     
     /// Return an integer code for the error.
@@ -63,14 +65,18 @@ public struct MatterError: Error {
         return object.message
     }
 }
-/*
+
+// MARK: - Equatable
+
 extension MatterError: Equatable {
     
     public static func == (lhs: MatterError, rhs: MatterError) -> Bool {
-        lhs.object.cxxObject == rhs.object.cxxObject
+        lhs.object.cxxObject.isEqual(rhs.object.cxxObject)
     }
 }
-*/
+
+// MARK: - CustomStringConvertible
+
 extension MatterError: CustomStringConvertible, CustomDebugStringConvertible {
     
     public var description: String {
@@ -78,9 +84,11 @@ extension MatterError: CustomStringConvertible, CustomDebugStringConvertible {
     }
     
     public var debugDescription: String {
-        return message
+        return description
     }
 }
+
+// MARK: - ReferenceConvertible
 
 extension MatterError: ReferenceConvertible {
     
@@ -153,12 +161,6 @@ extension MatterErrorCode: ExpressibleByIntegerLiteral {
     }
 }
 
-public extension MatterError {
-    
-    /// A message exceeds the sent limit.
-    static var sendingBlocked: MatterErrorCode { 0x01 }
-}
-
 public extension MatterErrorCode {
     
     /// Match error code
@@ -166,6 +168,31 @@ public extension MatterErrorCode {
         guard let value = rhs as? MatterError else { return false }
         return value.code == lhs
     }
+}
+
+public extension MatterError {
+    
+    /// A message exceeds the sent limit.
+    static var sendingBlocked: MatterErrorCode                          { 0x01 }
+    
+    /// A connection has been aborted.
+    static var connectionAborted: MatterErrorCode                       { 0x02 }
+    
+    /// An unexpected state was encountered.
+    static var incorrectState: MatterErrorCode                          { 0x03 }
+    
+    /// A message is too long.
+    static var messageTooLong: MatterErrorCode                          { 0x04 }
+    
+    /// An exchange version is not supported.
+    static var unsupportedExchangeVersion: MatterErrorCode              { 0x05 }
+    
+    /// The attempt to register an unsolicited message handler failed because the
+    /// unsolicited message handler pool is full.
+    static var tooManyUnsolicitedMessageHandlers: MatterErrorCode       { 0x06 }
+    
+    /// No callback has been registered for handling a connection.
+    static var noUnsolicitedMessageHandler: MatterErrorCode             { 0x07 }
 }
 
 // MARK: - Range

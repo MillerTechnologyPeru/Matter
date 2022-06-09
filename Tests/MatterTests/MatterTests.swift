@@ -14,6 +14,7 @@ final class MatterTests: XCTestCase {
         
         XCTAssertEqual(error.code, MatterError.sendingBlocked)
         XCTAssertEqual(error.message, "Error 0x00000001")
+        XCTAssertNotEqual(MatterError(MatterError.sendingBlocked), MatterError(MatterError.connectionAborted))
         
         do {
             throw error

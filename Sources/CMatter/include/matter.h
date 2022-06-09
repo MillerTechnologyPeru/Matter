@@ -15,4 +15,5 @@
 #import <setup_payload/SetupPayload.h>
 
 // Swift helpers
+#import <swift/Error-Swift.h>
 #import <swift/SetupPayload-Swift.h>
