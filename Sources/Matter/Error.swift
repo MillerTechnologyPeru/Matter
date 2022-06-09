@@ -9,7 +9,7 @@ import Foundation
 @_implementationOnly import CMatter
 
 /// Matter framework error
-public struct MatterError: Error {
+public final class MatterError: Error {
     
     public typealias Code = MatterErrorCode
     
@@ -25,11 +25,11 @@ public struct MatterError: Error {
         let error = file.withUTF8Buffer { fileBuffer in
             CHIP_ERROR(CHIP_ERROR.Range(range), code.rawValue, fileBuffer.baseAddress, numericCast(line))
         }
-        self.init(error)
+        self.cppObject = error
     }
     
     public init(_ code: Code) {
-        self.init(CHIP_ERROR(code.rawValue))
+        self.cppObject = CHIP_ERROR(code.rawValue)
     }
     
     public var code: Code {

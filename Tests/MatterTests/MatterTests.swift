@@ -13,7 +13,8 @@ final class MatterTests: XCTestCase {
         
         let error = MatterError(MatterError.sendingBlocked)
         
-        XCTAssertEqual(error.message, "Error 0xE5E08318")
+        XCTAssertEqual(error.code, MatterError.sendingBlocked)
+        XCTAssertEqual(error.message, "Error 0x00000001")
         
         do {
             throw error
