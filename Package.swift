@@ -30,6 +30,7 @@ let package = Package(
             name: "Matter",
             dependencies: [
                 "CMatter",
+                "COpenSSL",
                 .product(
                     name: "Bluetooth",
                     package: "Bluetooth"
@@ -37,10 +38,10 @@ let package = Package(
             ],
             swiftSettings: [
                 .unsafeFlags([
-                    //"-I", "Sources/CMatter",
-                    //"-I", "Sources/CMatter/include",
+                    "-I", "Sources/CMatter",
+                    "-I", "Sources/CMatter/include",
                     //"-Xfrontend", "-enable-experimental-cxx-interop",
-                ])
+                ]),
             ]
         ),
         .target(
@@ -58,12 +59,26 @@ let package = Package(
                 .headerSearchPath("."),
                 .headerSearchPath("deps/nlassert/include"),
                 .headerSearchPath("deps/nlio/include"),
-                .unsafeFlags(["-I", "/opt/homebrew/Cellar/openssl@3/3.0.3/include"], .when(platforms: [.macOS]))
+                .unsafeFlags([
+                    "-I", "/opt/homebrew/Cellar/openssl@3/3.0.3/include",
+                    //"-I", "/usr/local/opt/openssl/include",
+                ], .when(platforms: [.macOS])),
+                
+            ]
+        ),
+        .systemLibrary(
+            name: "COpenSSL",
+            pkgConfig: "openssl",
+            providers: [
+                .brew(["openssl"]),
+                .apt(["openssl libssl-dev"]),
             ]
         ),
         .testTarget(
             name: "MatterTests",
-            dependencies: ["Matter"]
+            dependencies: [
+                "Matter"
+            ]
         ),
     ],
     cLanguageStandard: .gnu11,
