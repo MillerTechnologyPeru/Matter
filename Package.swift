@@ -38,9 +38,7 @@ let package = Package(
             ],
             swiftSettings: [
                 .unsafeFlags([
-                    "-I", "Sources/CMatter",
-                    "-I", "Sources/CMatter/include",
-                    //"-Xfrontend", "-enable-experimental-cxx-interop",
+                    "-Xfrontend", "-enable-cxx-interop",
                 ]),
             ]
         ),
@@ -77,7 +75,7 @@ let package = Package(
         .testTarget(
             name: "MatterTests",
             dependencies: [
-                "Matter"
+                "Matter",
             ]
         ),
     ],

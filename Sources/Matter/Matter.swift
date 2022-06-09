@@ -1,7 +1,7 @@
 import Foundation
-import CMatter
+@_implementationOnly import CMatter
 
-public final class MatterController {
+public struct MatterController {
     
     
 }

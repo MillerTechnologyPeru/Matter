@@ -1,10 +1,10 @@
 import XCTest
-import CMatter
 @testable import Matter
+@_implementationOnly import CMatter
 
 final class MatterTests: XCTestCase {
     
     func testExample() throws {
-        print("Chip version: \(CHIP_VERSION_STRING)")
+        print("CHIP version: \(CHIP_VERSION_STRING)")
     }
 }
