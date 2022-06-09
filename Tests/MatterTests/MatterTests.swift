@@ -28,10 +28,12 @@ final class MatterTests: XCTestCase {
         // verify CoW mutations
         let setupPayloadA = Matter.SetupPayload()
         var setupPayloadB = setupPayloadA
+        XCTAssertEqual(setupPayloadA, setupPayloadB)
         XCTAssertEqual(setupPayloadA.version, setupPayloadB.version)
         XCTAssert(setupPayloadA.handle === setupPayloadB.handle)
         XCTAssert(setupPayloadA.handle.uncopiedReference() === setupPayloadB.handle.uncopiedReference())
         setupPayloadB.version = .max
+        XCTAssertNotEqual(setupPayloadA, setupPayloadB)
         XCTAssertNotEqual(setupPayloadA.version, setupPayloadB.version)
         XCTAssertFalse(setupPayloadA.handle === setupPayloadB.handle)
         XCTAssertFalse(setupPayloadA.handle.uncopiedReference() === setupPayloadB.handle.uncopiedReference())

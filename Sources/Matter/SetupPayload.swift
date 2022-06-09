@@ -25,16 +25,40 @@ public struct SetupPayload {
         set { applyMutation { $0.version = newValue } }
     }
     
-    public var serial: String {
+    public var serialNumber: String {
         get throws {
-            try handle.map { try $0.serial }
+            try handle.map { try $0.serialNumber }
         }
     }
 }
 
+// MARK: - Equatable
+
+extension SetupPayload: Equatable {
+    
+    public static func == (lhs: SetupPayload, rhs: SetupPayload) -> Bool {
+        return lhs.handle.uncopiedReference() == rhs.handle.uncopiedReference()
+    }
+}
+
+// MARK: - CustomStringConvertible
+
+extension SetupPayload: CustomStringConvertible, CustomDebugStringConvertible {
+    
+    public var description: String {
+        "SetupPayload()" // TODO: description string
+    }
+    
+    public var debugDescription: String {
+        description
+    }
+}
+
+// MARK: - MutableReferenceConvertible
+
 extension SetupPayload: MutableReferenceConvertible {
     
-    final class ReferenceType: CXXReference, Duplicatable {
+    final class ReferenceType: CXXReference, Duplicatable, Equatable {
         
         typealias CXXObject = MatterSetupPayload
         
@@ -54,12 +78,16 @@ extension SetupPayload: MutableReferenceConvertible {
             return copy
         }
         
+        static func == (lhs: ReferenceType, rhs: ReferenceType) -> Bool {
+            return lhs.cxxObject.isEqual(rhs.cxxObject)
+        }
+        
         var version: UInt8 {
             get { cxxObject.version }
             set { cxxObject.version = newValue }
         }
         
-        var serial: String {
+        var serialNumber: String {
             get throws {
                 var cxxString = std.string.init()
                 let error = cxxObject.getSerialNumber(&cxxString)
@@ -68,6 +96,24 @@ extension SetupPayload: MutableReferenceConvertible {
                 }
                 return String(cString: cxxString.c_str())
             }
+        }
+        
+        func addOptionalVendorData(_ vendorData: QRCodeInfo, tag: UInt8) throws {
+            
+        }
+        
+        func removeOptionalVendorData(for tag: UInt8) throws {
+            
+        }
+        
+        var allOptionalVendorData: [QRCodeInfo] {
+            get throws {
+                []
+            }
+        }
+        
+        func addSerialNumber(_ serialNumber: String) throws {
+            
         }
     }
 }
