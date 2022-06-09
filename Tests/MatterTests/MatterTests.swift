@@ -37,5 +37,6 @@ final class MatterTests: XCTestCase {
         XCTAssertNotEqual(setupPayloadA.version, setupPayloadB.version)
         XCTAssertFalse(setupPayloadA.handle === setupPayloadB.handle)
         XCTAssertFalse(setupPayloadA.handle.uncopiedReference() === setupPayloadB.handle.uncopiedReference())
+        XCTAssert(setupPayloadA.handle.uncopiedReference().allOptionalVendorData.isEmpty)
     }
 }

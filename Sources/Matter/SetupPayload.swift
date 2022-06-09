@@ -75,6 +75,7 @@ extension SetupPayload: MutableReferenceConvertible {
         func copy() -> ReferenceType {
             let copy = ReferenceType()
             copy.version = self.version
+            assert(copy == self, "Duplicate \(String(describing: ReferenceType.self)) instance is not equal to original")
             return copy
         }
         
@@ -107,9 +108,12 @@ extension SetupPayload: MutableReferenceConvertible {
         }
         
         var allOptionalVendorData: [QRCodeInfo] {
-            get throws {
-                []
-            }
+            let cxxVector = cxxObject.getAllOptionalVendorData()
+            let count = cxxVector.size()
+            return (0 ..< count)
+                .lazy
+                .map { cxxVector[$0] }
+                .map { QRCodeInfo($0) }
         }
         
         func addSerialNumber(_ serialNumber: String) throws {

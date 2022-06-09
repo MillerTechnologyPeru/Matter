@@ -5,12 +5,22 @@
 //  Created by Alsey Coleman Miller on 6/9/22.
 //
 
-import Foundation
 @_implementationOnly import CMatter
 
-public enum QRCodeInfo: Equatable, Hashable {
+public struct QRCodeInfo: Equatable, Hashable {
     
-    case unknown
+    public var data: QRCodeInfoData
+    
+    public var tag: UInt8
+    
+    public init(data: QRCodeInfoData, tag: UInt8) {
+        self.data = data
+        self.tag = tag
+    }
+}
+
+public enum QRCodeInfoData: Equatable, Hashable {
+    
     case string(String)
     case int32(Int32)
     case int64(Int64)
@@ -20,7 +30,6 @@ public enum QRCodeInfo: Equatable, Hashable {
 
 public enum QRCodeInfoType: UInt32 {
     
-    case unknown
     case string
     case int32
     case int64
@@ -28,12 +37,10 @@ public enum QRCodeInfoType: UInt32 {
     case uint64
 }
 
-public extension QRCodeInfo {
+public extension QRCodeInfoData {
     
     var type: QRCodeInfoType {
         switch self {
-        case .unknown:
-            return .unknown
         case .string:
             return .string
         case .int32:
@@ -48,16 +55,21 @@ public extension QRCodeInfo {
     }
 }
 
+internal extension QRCodeInfo {
+    
+    init(_ cxxObject: chip.OptionalQRCodeInfo) {
+        fatalError()
+    }
+}
+
 internal extension chip.OptionalQRCodeInfo {
     
-    init(_ value: QRCodeInfo, tag: UInt8) {
+    init(_ value: QRCodeInfo) {
         self.init()
+        self.tag = value.tag
+        self.type = .init(value.data.type.rawValue)
         /*
-        self.tag = tag
-        self.type = .init(value.type.rawValue)
         switch value {
-        case .unknown:
-            break
         case let .string(string):
             self.type = .init(QRCodeInfoType.string.rawValue)
             string.withCString { cString in
