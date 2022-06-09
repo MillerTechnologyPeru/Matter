@@ -16,7 +16,7 @@ public struct SetupPayload {
         self.handle = handle
     }
     
-    public init() {
+    internal init() {
         self.init(MutableHandle(adoptingReference: ReferenceType()))
     }
     
@@ -27,7 +27,7 @@ public struct SetupPayload {
     
     public var serial: String {
         get throws {
-            try handle.uncopiedReference().serial
+            try handle.map { try $0.serial }
         }
     }
 }
