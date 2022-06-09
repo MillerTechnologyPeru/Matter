@@ -1,4 +1,4 @@
-// swift-tools-version: 5.5
+// swift-tools-version: 5.6
 import PackageDescription
 
 // Sources copied from CHIP
@@ -48,14 +48,17 @@ let package = Package(
             dependencies: [],
             cSettings: [
                 .define("CHIP_HAVE_CONFIG_H"),
-                .define("CHIP_ADDRESS_RESOLVE_IMPL_INCLUDE_HEADER", to: "lib/address_resolve/AddressResolve_DefaultImpl.h"),
+                .define("CHIP_MINMDNS_HIGH_VERBOSITY"),
                 .headerSearchPath("."),
             ],
             cxxSettings: [
                 .define("CHIP_HAVE_CONFIG_H"),
-                .define("CHIP_ADDRESS_RESOLVE_IMPL_INCLUDE_HEADER", to: "lib/address_resolve/AddressResolve_DefaultImpl.h"),
+                .define("CHIP_MINMDNS_HIGH_VERBOSITY"),
+                .define("CHIP_ADDRESS_RESOLVE_IMPL_INCLUDE_HEADER", to: #""lib/address_resolve/AddressResolve_DefaultImpl.h""#),
                 .headerSearchPath("."),
                 .headerSearchPath("deps/nlassert/include"),
+                .headerSearchPath("deps/nlio/include"),
+                .unsafeFlags(["-I", "/opt/homebrew/Cellar/openssl@3/3.0.3/include"], .when(platforms: [.macOS]))
             ]
         ),
         .testTarget(

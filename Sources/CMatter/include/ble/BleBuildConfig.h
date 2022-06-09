@@ -6,6 +6,6 @@
 
 #define CONFIG_NETWORK_LAYER_BLE 1
 #define CHIP_ENABLE_CHIPOBLE_TEST 0
-#define BLE_PLATFORM_CONFIG_INCLUDE <platform/Linux/BlePlatformConfig.h>
+//#define BLE_PLATFORM_CONFIG_INCLUDE <platform/Linux/BlePlatformConfig.h>
 
 #endif  // BLE_BLEBUILDCONFIG_H_

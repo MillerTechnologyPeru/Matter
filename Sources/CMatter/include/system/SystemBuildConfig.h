@@ -27,9 +27,9 @@
 #define CONFIG_HAVE_VSNPRINTF_EX 0
 #define HAVE_SYS_SOCKET_H 1
 #define CHIP_PROJECT_CONFIG_INCLUDE <CHIPProjectConfig.h>
-#define CHIP_PLATFORM_CONFIG_INCLUDE <platform/Linux/CHIPPlatformConfig.h>
+//#define CHIP_PLATFORM_CONFIG_INCLUDE <platform/Linux/CHIPPlatformConfig.h>
 #define SYSTEM_PROJECT_CONFIG_INCLUDE <SystemProjectConfig.h>
-#define SYSTEM_PLATFORM_CONFIG_INCLUDE <platform/Linux/SystemPlatformConfig.h>
+//#define SYSTEM_PLATFORM_CONFIG_INCLUDE <platform/Linux/SystemPlatformConfig.h>
 #define CHIP_SYSTEM_LAYER_IMPL_CONFIG_FILE <system/SystemLayerImplSelect.h>
 
 #endif  // SYSTEM_SYSTEMBUILDCONFIG_H_
