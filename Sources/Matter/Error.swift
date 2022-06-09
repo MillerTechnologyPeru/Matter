@@ -8,7 +8,16 @@
 import Foundation
 @_implementationOnly import CMatter
 
-/// The basic type for all CHIP errors.
+/**
+ * This class represents CHIP errors.
+ *
+ * At the top level, an error belongs to a Range and has an integral Value whose meaning depends on the Range.
+ * One, Range::kSDK, is used for the CHIP SDK's own errors; others encapsulate error codes from external sources
+ * (e.g. libraries, OS) into a CHIP_ERROR.
+ *
+ * CHIP SDK errors inside Range::kSDK consist of a component identifier given by SdkPart and an arbitrary small
+ * integer Code.
+ */
 public struct MatterError: Error {
     
     public typealias Code = MatterErrorCode
@@ -21,6 +30,16 @@ public struct MatterError: Error {
         self.object = object
     }
     
+    internal init(_ object: ReferenceType.CXXObject) {
+        self.object = ReferenceType(object)
+    }
+    
+    /**
+     * Construct a CHIP_ERROR from the underlying storage type.
+     *
+     * @note
+     *  This is intended to be used only in foreign function interfaces.
+     */
     internal init(_ code: Code) {
         self.object = ReferenceType(code)
     }
@@ -151,6 +170,13 @@ public extension MatterErrorCode {
 
 // MARK: - Range
 
+/**
+ * Top-level error classification.
+ *
+ * Every error belongs to a Range and has an integral Value whose meaning depends on the Range.
+ * All native CHIP SDK errors belong to the kSDK range. Other ranges are used to encapsulate error
+ * codes from other subsystems (e.g. platform or library) used by the CHIP SDK.
+ */
 public enum MatterErrorRange: UInt8, CaseIterable {
     
     /// CHIP SDK errors.
