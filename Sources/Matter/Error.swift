@@ -8,7 +8,7 @@
 import Foundation
 @_implementationOnly import CMatter
 
-/// Matter framework error
+/// The basic type for all CHIP errors.
 public final class MatterError: Error {
     
     public typealias Code = MatterErrorCode
@@ -32,11 +32,18 @@ public final class MatterError: Error {
         self.cppObject = CHIP_ERROR(code.rawValue)
     }
     
+    /// Return an integer code for the error.
     public var code: Code {
         return Code(rawValue: cppObject.AsInteger())
     }
     
-    public var message: String {
+    /// Get the Range to which the error belongs.
+    public var range: Range {
+        return Range(cppObject.GetRange())
+    }
+    
+    /// Format an error as a string for printing.
+    internal var message: String {
         return String(cString: cppObject.AsString())
     }
 }
