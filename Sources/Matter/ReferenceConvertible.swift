@@ -29,6 +29,7 @@ internal final class MutableHandle<MutableType : Duplicatable> {
     }
     
     /// Apply a closure to the reference type.
+    @inline(__always)
     func map<ReturnType>(_ whatToDo : (MutableType) throws -> ReturnType) rethrows -> ReturnType {
         return try whatToDo(_pointer)
     }
