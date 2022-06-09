@@ -39,6 +39,8 @@ let package = Package(
             swiftSettings: [
                 .unsafeFlags([
                     "-Xfrontend", "-enable-cxx-interop",
+                    "-I", "Sources/CMatter",
+                    "-I", "Sources/CMatter/include",
                 ]),
             ]
         ),

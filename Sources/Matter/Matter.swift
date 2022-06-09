@@ -5,3 +5,5 @@ public struct MatterController {
     
     
 }
+
+public var MatterVersion: String { CHIP_VERSION_STRING }

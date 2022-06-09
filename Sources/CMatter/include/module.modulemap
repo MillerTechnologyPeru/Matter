@@ -1,4 +1,5 @@
 module CMatter {
-    header "matter.h"
     export *
+    header "matter.h"
+    requires cplusplus
 }
