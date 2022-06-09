@@ -82,7 +82,7 @@ extension MatterError: CustomStringConvertible, CustomDebugStringConvertible {
     }
 }
 
-extension MatterError {
+extension MatterError: ReferenceConvertible {
     
     final class ReferenceType: CXXReference {
         

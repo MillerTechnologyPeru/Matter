@@ -21,7 +21,8 @@ public struct SetupPayload {
     }
     
     public var version: UInt8 {
-        handle.uncopiedReference().version
+        get { handle.map { $0.version } }
+        set { applyMutation { $0.version = newValue } }
     }
     
     public var serial: String {
@@ -35,7 +36,7 @@ extension SetupPayload: MutableReferenceConvertible {
     
     final class ReferenceType: CXXReference, Duplicatable {
         
-        typealias CXXObject = chip.SetupPayload
+        typealias CXXObject = MatterSetupPayload
         
         private(set) var cxxObject: CXXObject
         
@@ -49,14 +50,13 @@ extension SetupPayload: MutableReferenceConvertible {
         
         func copy() -> ReferenceType {
             let copy = ReferenceType()
-            //copy.cxxObject.version = self.version
+            copy.version = self.version
             return copy
         }
         
         var version: UInt8 {
-            //get { cxxObject.version }
-            //set { cxxObject.version = newValue }
-            fatalError()
+            get { cxxObject.version }
+            set { cxxObject.version = newValue }
         }
         
         var serial: String {
