@@ -4,5 +4,5 @@
  *
  */
 
-#include <stdint.h>
-#include <stdbool.h>
+#include <CHIPVersion.h>
+#include <system/SystemBuildConfig.h>
