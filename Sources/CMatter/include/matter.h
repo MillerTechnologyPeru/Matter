@@ -13,6 +13,7 @@
 #include <lib/core/CHIPConfig.h>
 #include <lib/core/CHIPError.h>
 #import <setup_payload/SetupPayload.h>
+#import <setup_payload/QRCodeSetupPayloadParser.h>
 
 // Swift helpers
 #import <swift/Error-Swift.h>

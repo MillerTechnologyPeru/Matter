@@ -41,6 +41,8 @@ let package = Package(
                     "-Xfrontend", "-enable-cxx-interop",
                     "-I", "Sources/CMatter",
                     "-I", "Sources/CMatter/include",
+                    "-I", "Sources/CMatter/deps/nlassert/include",
+                    "-I", "Sources/CMatter/deps/nlio/include",
                 ]),
             ]
         ),
