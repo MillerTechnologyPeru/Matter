@@ -9,45 +9,49 @@ import Foundation
 @_implementationOnly import CMatter
 
 /// The basic type for all CHIP errors.
-public final class MatterError: Error {
+public struct MatterError: Error {
     
     public typealias Code = MatterErrorCode
     
     public typealias Range = MatterErrorRange
     
-    internal let cppObject: CHIP_ERROR
+    internal let object: ReferenceType
     
-    internal init(_ cppObject: CHIP_ERROR) {
-        self.cppObject = cppObject
+    internal init(_ object: ReferenceType) {
+        self.object = object
     }
     
-    public init(_ code: Code, range: Range, file: StaticString = #file, line: UInt = #line) {
-        let error = file.withUTF8Buffer { fileBuffer in
-            CHIP_ERROR(CHIP_ERROR.Range(range), code.rawValue, fileBuffer.baseAddress, numericCast(line))
-        }
-        self.cppObject = error
+    internal init(_ code: Code) {
+        self.object = ReferenceType(code)
     }
     
-    public init(_ code: Code) {
-        self.cppObject = CHIP_ERROR(code.rawValue)
+    internal init(_ code: Code, range: Range, file: StaticString = #file, line: UInt = #line) {
+        self.object = ReferenceType(code, range: range, file: file, line: line)
     }
     
     /// Return an integer code for the error.
     public var code: Code {
-        return Code(rawValue: cppObject.AsInteger())
+        return object.code
     }
     
     /// Get the Range to which the error belongs.
     public var range: Range {
-        return Range(cppObject.GetRange())
+        return object.range
     }
     
     /// Format an error as a string for printing.
     internal var message: String {
-        return String(cString: cppObject.AsString())
+        return object.message
     }
 }
-
+/*
+extension MatterError: Equatable {
+    
+    public static func == (lhs: MatterError, rhs: MatterError) -> Bool {
+        lhs.object.cxxObject == rhs.object.cxxObject
+    }
+}
+*/
 extension MatterError: CustomStringConvertible, CustomDebugStringConvertible {
     
     public var description: String {
@@ -56,6 +60,47 @@ extension MatterError: CustomStringConvertible, CustomDebugStringConvertible {
     
     public var debugDescription: String {
         return message
+    }
+}
+
+extension MatterError {
+    
+    final class ReferenceType: CXXReference {
+        
+        typealias CXXObject = CHIP_ERROR
+        
+        let cxxObject: CXXObject
+        
+        init(_ cxxObject: CXXObject) {
+            self.cxxObject = cxxObject
+        }
+        
+        init(_ code: Code, range: Range, file: StaticString = #file, line: UInt = #line) {
+            let cxxObject = file.withUTF8Buffer { fileBuffer in
+                CHIP_ERROR(CHIP_ERROR.Range(range), code.rawValue, fileBuffer.baseAddress, numericCast(line))
+            }
+            self.cxxObject = cxxObject
+        }
+        
+        init(_ code: Code) {
+            self.cxxObject = CHIP_ERROR(code.rawValue)
+        }
+        
+        /// Return an integer code for the error.
+        var code: Code {
+            return Code(rawValue: cxxObject.AsInteger())
+        }
+        
+        /// Get the Range to which the error belongs.
+        
+        var range: Range {
+            return Range(cxxObject.GetRange())
+        }
+        
+        /// Format an error as a string for printing.
+        var message: String {
+            return String(cString: cxxObject.AsString())
+        }
     }
 }
 
