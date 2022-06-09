@@ -1,6 +1,5 @@
 import XCTest
 @testable import Matter
-@testable import Example
 
 final class MatterTests: XCTestCase {
     
