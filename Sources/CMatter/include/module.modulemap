@@ -1,0 +1,4 @@
+module CMatter {
+    header "matter.h"
+    export *
+}
