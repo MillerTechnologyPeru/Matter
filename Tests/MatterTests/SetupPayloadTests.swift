@@ -53,4 +53,43 @@ final class SetupPayloadTests: XCTestCase {
         XCTAssertThrowsError(try CHIPQRCodeSetupPayloadParser(base38Representation: invalidString).populatePayload())
         #endif
     }
+    
+    func testManualCodeParser() throws {
+        let string = "636108753500001000015"
+        let payload = try SetupPayload(manual: string)
+        XCTAssertEqual(payload.version, 0)
+        XCTAssertEqual(payload.discriminator, 2560)
+        XCTAssertEqual(payload.setupPinCode, 123456780)
+        XCTAssertEqual(payload.vendorID, 1)
+        XCTAssertEqual(payload.productID, 1)
+        XCTAssertEqual(payload.commissioningFlow, .custom)
+        XCTAssertEqual(payload.rendezvousInformation, [])
+        
+        #if canImport(CHIP)
+        let chipPayload = try CHIPManualSetupPayloadParser(decimalStringRepresentation: string).populatePayload()
+        XCTAssertEqual(chipPayload.version.uint8Value, payload.version)
+        XCTAssertEqual(chipPayload.discriminator.uint16Value, payload.discriminator)
+        XCTAssertEqual(chipPayload.setUpPINCode.uint32Value, payload.setupPinCode)
+        XCTAssertEqual(chipPayload.vendorID.uint16Value, payload.vendorID)
+        XCTAssertEqual(chipPayload.productID.uint16Value, payload.productID)
+        XCTAssertEqual(chipPayload.commissioningFlow.rawValue, numericCast(payload.commissioningFlow.rawValue))
+        XCTAssertEqual(chipPayload.rendezvousInformation.rawValue, numericCast(payload.rendezvousInformation.rawValue))
+        #endif
+    }
+    
+    func testManualCodeParserError() {
+        let invalidString = "abc"
+        do {
+            let _ = try SetupPayload(qrCode: invalidString)
+            XCTFail("Invalid code")
+        } catch MatterErrorCode(rawValue: 0x0000002F) {
+            
+        } catch {
+            XCTFail("Invalid error \(error)")
+        }
+        
+        #if canImport(CHIP)
+        XCTAssertThrowsError(try CHIPManualSetupPayloadParser(decimalStringRepresentation: invalidString).populatePayload())
+        #endif
+    }
 }

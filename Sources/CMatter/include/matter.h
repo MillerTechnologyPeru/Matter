@@ -17,6 +17,8 @@
 #import <setup_payload/SetupPayload.h>
 #import <setup_payload/QRCodeSetupPayloadParser.h>
 #import <setup_payload/QRCodeSetupPayloadGenerator.h>
+#import <setup_payload/ManualSetupPayloadParser.h>
+#import <setup_payload/ManualSetupPayloadGenerator.h>
 
 // Swift helpers
 #import <swift/Error-Swift.h>
