@@ -45,6 +45,16 @@ public struct SetupPayload {
         set { applyMutation { $0.rendezvousInformation = newValue } }
     }
     
+    public var discriminator: UInt16 {
+        get { handle.map { $0.discriminator } }
+        set { applyMutation { $0.discriminator = newValue } }
+    }
+    
+    public var setupPinCode: UInt32 {
+        get { handle.map { $0.setupPinCode } }
+        set { applyMutation { $0.setupPinCode = newValue } }
+    }
+    
     public var serialNumber: String {
         get throws {
             try handle.map { try $0.serialNumber }
@@ -128,6 +138,16 @@ extension SetupPayload: MutableReferenceConvertible {
             set { cxxObject.rendezvousInformation = .init(newValue) }
         }
         
+        var discriminator: UInt16 {
+            get { cxxObject.discriminator }
+            set { cxxObject.discriminator = newValue }
+        }
+        
+        var setupPinCode: UInt32 {
+            get { cxxObject.setupPinCode }
+            set { cxxObject.setupPinCode = newValue }
+        }
+        
         var isValidQRCodePayload: Bool {
             return cxxObject.isValidQRCodePayload
         }
@@ -139,18 +159,9 @@ extension SetupPayload: MutableReferenceConvertible {
         var serialNumber: String {
             get throws {
                 var cxxString = std.string.init()
-                let cxxError = cxxObject.getSerialNumber(&cxxString)
-                try cxxError.throwError()
+                try cxxObject.getSerialNumber(&cxxString).throwError()
                 return String(cString: cxxString.c_str())
             }
-        }
-        
-        func addOptionalVendorData(_ vendorData: QRCodeInfo) throws {
-            
-        }
-        
-        func removeOptionalVendorData(for tag: UInt8) throws {
-            
         }
         
         var allOptionalVendorData: [QRCodeInfo] {
@@ -159,9 +170,25 @@ extension SetupPayload: MutableReferenceConvertible {
             return (0 ..< count)
                 .map { QRCodeInfo(cxxVector[$0]) }
         }
+        /*
+        func addOptionalVendorData(_ string: String, tag: UInt8) throws {
+            try string.withCString {
+                try cxxObject.addOptionalVendorData(tag, std.string($0)).throwError()
+            }
+        }
+        
+        func addOptionalVendorData(_ value: Int32, tag: UInt8) throws {
+            try cxxObject.addOptionalVendorData(tag, value).throwError()
+        }
+        
+        func removeOptionalVendorData(for tag: UInt8) throws {
+            try cxxObject.removeOptionalVendorData(tag).throwError()
+        }
         
         func addSerialNumber(_ serialNumber: String) throws {
-            
-        }
+            try serialNumber.withCString {
+                try cxxObject.addSerialNumber(std.string($0)).throwError()
+            }
+        }*/
     }
 }
