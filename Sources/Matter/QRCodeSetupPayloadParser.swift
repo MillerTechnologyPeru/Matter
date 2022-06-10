@@ -37,8 +37,8 @@ internal final class QRCodeSetupPayloadParser: CXXReference {
 
 public extension SetupPayload {
     
-    static func qrCode(base38Encoded string: String) throws -> SetupPayload {
-        let parser = QRCodeSetupPayloadParser(base38Encoded: string)
-        return try parser.populatePayload()
+    init(qrCode base38Encoded: String) throws {
+        let parser = QRCodeSetupPayloadParser(base38Encoded: base38Encoded)
+        self = try parser.populatePayload()
     }
 }

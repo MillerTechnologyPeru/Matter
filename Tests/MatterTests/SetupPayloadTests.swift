@@ -16,7 +16,7 @@ final class SetupPayloadTests: XCTestCase {
     
     func testQRCodeParser() throws {
         let base38String = "MT:R5L90MP500K64J00000"
-        let payload = try SetupPayload.qrCode(base38Encoded: base38String)
+        let payload = try SetupPayload(qrCode: base38String)
         XCTAssertEqual(payload.version, 5)
         XCTAssertEqual(payload.discriminator, 128)
         XCTAssertEqual(payload.setupPinCode, 2048)
@@ -41,7 +41,7 @@ final class SetupPayloadTests: XCTestCase {
     func testQRCodeParserError() {
         let invalidString = "MT:R5L90MP500K64J0000."
         do {
-            let _ = try SetupPayload.qrCode(base38Encoded: invalidString)
+            let _ = try SetupPayload(qrCode: invalidString)
             XCTFail("Invalid code")
         } catch MatterErrorCode(rawValue: 0x0000002F) {
             
