@@ -8,87 +8,49 @@
 import Foundation
 @_implementationOnly import CMatter
 
-public struct SetupPayload {
+public struct SetupPayload: Equatable, Hashable, Codable {
     
-    internal var handle: MutableHandle<ReferenceType>
+    public var version: UInt8
     
-    internal init(_ handle: MutableHandle<ReferenceType>) {
-        self.handle = handle
-    }
+    public var vendorID: UInt16
     
-    internal init() {
-        self.init(MutableHandle(adoptingReference: ReferenceType()))
-    }
+    public var productID: UInt16
     
-    public var version: UInt8 {
-        get { handle.map { $0.version } }
-        set { applyMutation { $0.version = newValue } }
-    }
+    public var commissioningFlow: CommissioningFlow
     
-    public var vendorID: UInt16 {
-        get { handle.map { $0.vendorID } }
-        set { applyMutation { $0.vendorID = newValue } }
-    }
+    public var rendezvousInformation: RendezvousInformationFlags
     
-    public var productID: UInt16 {
-        get { handle.map { $0.productID } }
-        set { applyMutation { $0.productID = newValue } }
-    }
+    public var discriminator: UInt16
     
-    public var commissioningFlow: CommissioningFlow {
-        get { handle.map { $0.commissioningFlow } }
-        set { applyMutation { $0.commissioningFlow = newValue } }
-    }
+    public var setupPinCode: UInt32
     
-    public var rendezvousInformation: RendezvousInformationFlags {
-        get { handle.map { $0.rendezvousInformation } }
-        set { applyMutation { $0.rendezvousInformation = newValue } }
-    }
+    public var serialNumber: String?
     
-    public var discriminator: UInt16 {
-        get { handle.map { $0.discriminator } }
-        set { applyMutation { $0.discriminator = newValue } }
-    }
-    
-    public var setupPinCode: UInt32 {
-        get { handle.map { $0.setupPinCode } }
-        set { applyMutation { $0.setupPinCode = newValue } }
-    }
-    
-    public var serialNumber: String {
-        get throws {
-            try handle.map { try $0.serialNumber }
-        }
-    }
-}
-
-// MARK: - Equatable
-
-extension SetupPayload: Equatable {
-    
-    public static func == (lhs: SetupPayload, rhs: SetupPayload) -> Bool {
-        return lhs.handle.uncopiedReference() == rhs.handle.uncopiedReference()
-    }
-}
-
-// MARK: - CustomStringConvertible
-
-extension SetupPayload: CustomStringConvertible, CustomDebugStringConvertible {
-    
-    public var description: String {
-        "SetupPayload()" // TODO: description string
-    }
-    
-    public var debugDescription: String {
-        description
+    init(version: UInt8,
+         vendorID: UInt16,
+         productID: UInt16,
+         commissioningFlow: CommissioningFlow = .standard,
+         rendezvousInformation: RendezvousInformationFlags = [],
+         discriminator: UInt16,
+         setupPinCode: UInt32,
+         serialNumber: String? = nil
+    ) {
+        self.version = version
+        self.vendorID = vendorID
+        self.productID = productID
+        self.commissioningFlow = commissioningFlow
+        self.rendezvousInformation = rendezvousInformation
+        self.discriminator = discriminator
+        self.setupPinCode = setupPinCode
+        self.serialNumber = serialNumber
     }
 }
 
 // MARK: - MutableReferenceConvertible
 
-extension SetupPayload: MutableReferenceConvertible {
+extension SetupPayload: ReferenceConvertible {
     
-    final class ReferenceType: CXXReference, Duplicatable, Equatable {
+    final class ReferenceType: CXXReference, Equatable {
         
         typealias CXXObject = MatterSetupPayload
         
@@ -100,13 +62,6 @@ extension SetupPayload: MutableReferenceConvertible {
         
         init(_ cxxObject: CXXObject) {
             self.cxxObject = cxxObject
-        }
-        
-        func copy() -> ReferenceType {
-            let copy = ReferenceType()
-            copy.version = self.version
-            assert(copy == self, "Duplicate \(String(describing: ReferenceType.self)) instance is not equal to original")
-            return copy
         }
         
         static func == (lhs: ReferenceType, rhs: ReferenceType) -> Bool {
@@ -190,5 +145,34 @@ extension SetupPayload: MutableReferenceConvertible {
                 try cxxObject.addSerialNumber(std.string($0)).throwError()
             }
         }*/
+    }
+}
+
+internal extension SetupPayload {
+    
+    init(_ object: ReferenceType) {
+        self.version = object.version
+        self.vendorID = object.vendorID
+        self.productID = object.productID
+        self.commissioningFlow = object.commissioningFlow
+        self.rendezvousInformation = object.rendezvousInformation
+        self.discriminator = object.discriminator
+        self.setupPinCode = object.setupPinCode
+        self.serialNumber = try? object.serialNumber
+    }
+}
+
+internal extension SetupPayload.ReferenceType {
+    
+    convenience init(_ value: SetupPayload) {
+        self.init()
+        self.version = value.version
+        self.vendorID = value.vendorID
+        self.productID = value.productID
+        self.commissioningFlow = value.commissioningFlow
+        self.rendezvousInformation = value.rendezvousInformation
+        self.discriminator = value.discriminator
+        self.setupPinCode = value.setupPinCode
+        //self.serialNumber = value.serialNumber
     }
 }

@@ -29,9 +29,9 @@ internal final class QRCodeSetupPayloadParser: CXXReference {
     }
     
     func populatePayload() throws -> SetupPayload {
-        var payload = MatterSetupPayloadCreate()
-        try cxxObject.populatePayload(&payload).throwError()
-        return SetupPayload(payload)
+        var cxxPayload = MatterSetupPayloadCreate()
+        try cxxObject.populatePayload(&cxxPayload).throwError()
+        return SetupPayload(.init(cxxPayload))
     }
 }
 

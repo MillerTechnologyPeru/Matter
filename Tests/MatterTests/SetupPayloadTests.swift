@@ -11,21 +11,6 @@ import XCTest
 
 final class SetupPayloadTests: XCTestCase {
     
-    func testCopyOnWrite() {
-        let setupPayloadA = Matter.SetupPayload()
-        var setupPayloadB = setupPayloadA
-        XCTAssertEqual(setupPayloadA, setupPayloadB)
-        XCTAssertEqual(setupPayloadA.version, setupPayloadB.version)
-        XCTAssert(setupPayloadA.handle === setupPayloadB.handle)
-        XCTAssert(setupPayloadA.handle.uncopiedReference() === setupPayloadB.handle.uncopiedReference())
-        setupPayloadB.version = .max
-        XCTAssertNotEqual(setupPayloadA, setupPayloadB)
-        XCTAssertNotEqual(setupPayloadA.version, setupPayloadB.version)
-        XCTAssertFalse(setupPayloadA.handle === setupPayloadB.handle)
-        XCTAssertFalse(setupPayloadA.handle.uncopiedReference() === setupPayloadB.handle.uncopiedReference())
-        XCTAssert(setupPayloadA.handle.uncopiedReference().allOptionalVendorData.isEmpty)
-    }
-    
     func testQRCodeParser() throws {
         let base38String = "MT:R5L90MP500K64J00000"
         let payload = try SetupPayload.qrCode(base38Encoded: base38String)
