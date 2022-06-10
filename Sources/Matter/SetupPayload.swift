@@ -65,7 +65,8 @@ extension SetupPayload: MutableReferenceConvertible {
         private(set) var cxxObject: CXXObject
         
         init() {
-            self.cxxObject = CXXObject()
+            //self.cxxObject = CXXObject()
+            fatalError()
         }
         
         init(_ cxxObject: CXXObject) {
