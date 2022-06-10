@@ -29,6 +29,7 @@ final class SetupPayloadTests: XCTestCase {
     func testQRCodeParser() throws {
         let base38String = "MT:R5L90MP500K64J00000"
         let payload = try SetupPayload.qrCode(base38Encoded: base38String)
+        XCTAssertEqual(try payload.generateQRCode(allowInvalid: true), base38String)
         XCTAssertEqual(payload.version, 5)
     }
     

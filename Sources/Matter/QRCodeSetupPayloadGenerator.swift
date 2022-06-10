@@ -31,12 +31,21 @@ internal final class QRCodeSetupPayloadGenerator: CXXReference {
         }
         return String(cString: cxxString.c_str())
     }
+    
+    func setAllowInvalidPayload(_ allow: Bool = true) {
+        cxxObject.SetAllowInvalidPayload(allow)
+    }
 }
 
 public extension SetupPayload {
     
     func generateQRCode() throws -> String {
+        return try generateQRCode(allowInvalid: true)
+    }
+    
+    internal func generateQRCode(allowInvalid: Bool) throws -> String {
         let generator = QRCodeSetupPayloadGenerator(payload: self)
+        generator.setAllowInvalidPayload(allowInvalid)
         return try generator.generateBase38EncodedString()
     }
 }
