@@ -9,6 +9,13 @@
 
 using MatterSetupPayload = ::chip::SetupPayload;
 
+static inline MatterSetupPayload MatterSetupPayloadCreate()
+//__attribute__((swift_name("MatterSetupPayload.init()")))
+{
+    ::chip::SetupPayload payload;
+    return payload;
+}
+
 static inline bool MatterSetupPayloadIsEqual(chip::SetupPayload payload, chip::SetupPayload other)
 __attribute__((swift_name("MatterSetupPayload.isEqual(self:_:)")))
 {
