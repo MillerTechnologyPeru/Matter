@@ -20,7 +20,8 @@ internal final class QRCodeSetupPayloadGenerator: CXXReference {
     
     init(payload: SetupPayload) {
         let _ = MemoryAllocator.initialize
-        self.cxxObject = payload.handle.map { CXXObject($0.cxxObject) }
+        var cxxPayload = payload.handle.map { $0.cxxObject }
+        self.cxxObject = CXXObject(&cxxPayload)
     }
     
     func generateBase38EncodedString() throws -> String {
