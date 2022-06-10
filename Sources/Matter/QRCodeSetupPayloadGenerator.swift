@@ -31,9 +31,7 @@ internal final class QRCodeSetupPayloadGenerator: CXXReference {
     func generateBase38EncodedString() throws -> String {
         var cxxString = std.string()
         let cxxError = cxxObject.payloadBase38Representation(&cxxString)
-        guard cxxError.AsInteger() == 0 else {
-            throw MatterError(cxxError)
-        }
+        try cxxError.throwError()
         return String(cString: cxxString.c_str())
     }
     

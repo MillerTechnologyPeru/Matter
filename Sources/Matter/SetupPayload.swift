@@ -91,10 +91,8 @@ extension SetupPayload: MutableReferenceConvertible {
         var serialNumber: String {
             get throws {
                 var cxxString = std.string.init()
-                let error = cxxObject.getSerialNumber(&cxxString)
-                guard error.AsInteger() == 0 else {
-                    throw MatterError(error)
-                }
+                let cxxError = cxxObject.getSerialNumber(&cxxString)
+                try cxxError.throwError()
                 return String(cString: cxxString.c_str())
             }
         }

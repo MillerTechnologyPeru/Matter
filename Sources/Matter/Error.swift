@@ -43,10 +43,12 @@ public struct MatterError: Error {
      *  This is intended to be used only in foreign function interfaces.
      */
     internal init(_ code: Code) {
+        assert(code.rawValue != 0)
         self.init(ReferenceType(code))
     }
     
     internal init(_ code: Code, range: Range, file: StaticString = #file, line: UInt = #line) {
+        assert(code.rawValue != 0)
         self.init(ReferenceType(code, range: range, file: file, line: line))
     }
     
@@ -63,6 +65,15 @@ public struct MatterError: Error {
     /// Format an error as a string for printing.
     internal var message: String {
         return object.message
+    }
+}
+
+internal extension CHIP_ERROR {
+    
+    func throwError() throws {
+        guard self.AsInteger() == 0 else {
+            throw MatterError(self)
+        }
     }
 }
 
@@ -119,7 +130,6 @@ extension MatterError: ReferenceConvertible {
         }
         
         /// Get the Range to which the error belongs.
-        
         var range: Range {
             return Range(cxxObject.GetRange())
         }
