@@ -7,7 +7,7 @@ import CHIP
 final class MatterTests: XCTestCase {
     
     func testVersion() throws {
-        print("Matter version: \(MatterVersion)")
+        print("Matter version: \(MatterVersion.current.versionString)")
     }
     
     func testError() {

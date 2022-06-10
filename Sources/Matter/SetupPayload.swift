@@ -121,8 +121,7 @@ extension SetupPayload: ReferenceConvertible {
         
         var allOptionalVendorData: [QRCodeInfo] {
             let cxxVector = cxxObject.getAllOptionalVendorData()
-            let count = cxxVector.size()
-            return (0 ..< count)
+            return (0 ..< cxxVector.size())
                 .map { QRCodeInfo(cxxVector[$0]) }
         }
         /*
