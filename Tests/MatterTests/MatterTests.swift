@@ -1,5 +1,8 @@
 import XCTest
 @testable import Matter
+#if canImport(CHIP)
+import CHIP
+#endif
 
 final class MatterTests: XCTestCase {
     

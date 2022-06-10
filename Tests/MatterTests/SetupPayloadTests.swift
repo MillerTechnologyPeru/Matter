@@ -1,5 +1,5 @@
 //
-//  File.swift
+//  SetupPayloadTests.swift
 //  
 //
 //  Created by Alsey Coleman Miller on 6/9/22.
@@ -8,6 +8,9 @@
 import Foundation
 import XCTest
 @testable import Matter
+#if canImport(CHIP)
+import CHIP
+#endif
 
 final class SetupPayloadTests: XCTestCase {
     
@@ -22,6 +25,17 @@ final class SetupPayloadTests: XCTestCase {
         XCTAssertEqual(payload.commissioningFlow, .standard)
         XCTAssertEqual(payload.rendezvousInformation, [.softAP])
         XCTAssertEqual(try payload.generateQRCode(allowInvalid: true), base38String)
+        
+        #if canImport(CHIP)
+        let chipPayload = try CHIPQRCodeSetupPayloadParser(base38Representation: base38String).populatePayload()
+        XCTAssertEqual(chipPayload.version.uint8Value, payload.version)
+        XCTAssertEqual(chipPayload.discriminator.uint16Value, payload.discriminator)
+        XCTAssertEqual(chipPayload.setUpPINCode.uint32Value, payload.setupPinCode)
+        XCTAssertEqual(chipPayload.vendorID.uint16Value, payload.vendorID)
+        XCTAssertEqual(chipPayload.productID.uint16Value, payload.productID)
+        XCTAssertEqual(chipPayload.commissioningFlow.rawValue, numericCast(payload.commissioningFlow.rawValue))
+        XCTAssertEqual(chipPayload.rendezvousInformation.rawValue, numericCast(payload.rendezvousInformation.rawValue))
+        #endif
     }
     
     func testQRCodeParserError() {
@@ -30,9 +44,13 @@ final class SetupPayloadTests: XCTestCase {
             let _ = try SetupPayload.qrCode(base38Encoded: invalidString)
             XCTFail("Invalid code")
         } catch MatterErrorCode(rawValue: 0x0000002F) {
-            return
+            
         } catch {
             XCTFail("Invalid error \(error)")
         }
+        
+        #if canImport(CHIP)
+        XCTAssertThrowsError(try CHIPQRCodeSetupPayloadParser(base38Representation: invalidString).populatePayload())
+        #endif
     }
 }
