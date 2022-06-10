@@ -113,9 +113,9 @@ extension SetupPayload: ReferenceConvertible {
         
         var serialNumber: String {
             get throws {
-                var cxxString = std.string.init()
+                var cxxString = std.string()
                 try cxxObject.getSerialNumber(&cxxString).throwError()
-                return String(cString: cxxString.c_str())
+                return String(cxxString: cxxString)
             }
         }
         
