@@ -35,14 +35,14 @@ public extension RendezvousInformationFlags {
 
 internal extension chip.RendezvousInformationFlags {
     
-    init(_ flag: RendezvousInformationFlags) {
-        self.init(flag.rawValue)
+    init(_ flags: RendezvousInformationFlags) {
+        self.init(flags.rawValue)
     }
 }
 
 internal extension RendezvousInformationFlags {
     
-    init(_ flag: RendezvousInformationFlags) {
-        self.init(rawValue: flag.rawValue)
+    init(_ flags: chip.RendezvousInformationFlags) {
+        self.init(rawValue: flags.Raw())
     }
 }

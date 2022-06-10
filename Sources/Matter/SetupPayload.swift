@@ -25,6 +25,26 @@ public struct SetupPayload {
         set { applyMutation { $0.version = newValue } }
     }
     
+    public var vendorID: UInt16 {
+        get { handle.map { $0.vendorID } }
+        set { applyMutation { $0.vendorID = newValue } }
+    }
+    
+    public var productID: UInt16 {
+        get { handle.map { $0.productID } }
+        set { applyMutation { $0.productID = newValue } }
+    }
+    
+    public var commissioningFlow: CommissioningFlow {
+        get { handle.map { $0.commissioningFlow } }
+        set { applyMutation { $0.commissioningFlow = newValue } }
+    }
+    
+    public var rendezvousInformation: RendezvousInformationFlags {
+        get { handle.map { $0.rendezvousInformation } }
+        set { applyMutation { $0.rendezvousInformation = newValue } }
+    }
+    
     public var serialNumber: String {
         get throws {
             try handle.map { try $0.serialNumber }
@@ -88,6 +108,34 @@ extension SetupPayload: MutableReferenceConvertible {
             set { cxxObject.version = newValue }
         }
         
+        var vendorID: UInt16 {
+            get { cxxObject.vendorID }
+            set { cxxObject.vendorID = newValue }
+        }
+        
+        var productID: UInt16 {
+            get { cxxObject.productID }
+            set { cxxObject.productID = newValue }
+        }
+        
+        var commissioningFlow: CommissioningFlow {
+            get { .init(cxxObject.commissioningFlow) }
+            set { cxxObject.commissioningFlow = .init(newValue) }
+        }
+        
+        var rendezvousInformation: RendezvousInformationFlags {
+            get { .init(cxxObject.rendezvousInformation) }
+            set { cxxObject.rendezvousInformation = .init(newValue) }
+        }
+        
+        var isValidQRCodePayload: Bool {
+            return cxxObject.isValidQRCodePayload
+        }
+        
+        var isValidManualCode: Bool {
+            return cxxObject.isValidManualCode
+        }
+        
         var serialNumber: String {
             get throws {
                 var cxxString = std.string.init()
@@ -109,9 +157,7 @@ extension SetupPayload: MutableReferenceConvertible {
             let cxxVector = cxxObject.getAllOptionalVendorData()
             let count = cxxVector.size()
             return (0 ..< count)
-                .lazy
-                .map { cxxVector[$0] }
-                .map { QRCodeInfo($0) }
+                .map { QRCodeInfo(cxxVector[$0]) }
         }
         
         func addSerialNumber(_ serialNumber: String) throws {
