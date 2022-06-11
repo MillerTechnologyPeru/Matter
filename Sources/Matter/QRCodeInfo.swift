@@ -9,8 +9,10 @@
 
 public struct QRCodeInfo: Equatable, Hashable, Codable {
     
+    ///
     public var data: QRCodeInfoData
     
+    /// The tag number of the optional info
     public var tag: UInt8
     
     public init(data: QRCodeInfoData, tag: UInt8) {
@@ -77,11 +79,11 @@ extension QRCodeInfoData: Codable {
 
 public enum QRCodeInfoType: UInt32, Codable {
     
-    case string
-    case int32
-    case int64
-    case uint32
-    case uint64
+    case string     = 1
+    case int32      = 2
+    case int64      = 3
+    case uint32     = 4
+    case uint64     = 5
 }
 
 public extension QRCodeInfoData {
@@ -105,7 +107,21 @@ public extension QRCodeInfoData {
 internal extension QRCodeInfo {
     
     init(_ cxxObject: chip.OptionalQRCodeInfo) {
-        fatalError()
+        let type = QRCodeInfoType(rawValue: cxxObject.type.rawValue)!
+        let data: QRCodeInfoData
+        switch type {
+        case .string:
+            data = .string(String(cxxString: cxxObject.data))
+        case .int32:
+            data = .int32(cxxObject.int32)
+        case .int64:
+            data = .int32(numericCast(cxxObject.int32))
+        case .uint32:
+            data = .int32(numericCast(cxxObject.int32))
+        case .uint64:
+            data = .int32(numericCast(cxxObject.int32))
+        }
+        self.init(data: data, tag: cxxObject.tag)
     }
 }
 

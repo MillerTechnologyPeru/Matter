@@ -38,6 +38,23 @@ final class SetupPayloadTests: XCTestCase {
         #endif
     }
     
+    func testQRCodeParserWithOptionalData() throws {
+        let base38String = "MT:R5L90MP500K64J0A33P0SET70.QT52B.E23-WZE0WISA0DK5N1K8SQ1RYCU1O0"
+        let payload = try SetupPayload(qrCode: base38String)
+        XCTAssertEqual(payload.version, 5)
+        XCTAssertEqual(payload.discriminator, 128)
+        XCTAssertEqual(payload.setupPinCode, 2048)
+        XCTAssertEqual(payload.vendorID, 12)
+        XCTAssertEqual(payload.productID, 1)
+        XCTAssertEqual(payload.commissioningFlow, .standard)
+        XCTAssertEqual(payload.rendezvousInformation, [.softAP])
+        XCTAssertEqual(payload.serialNumber, "123456789")
+        XCTAssertEqual(payload.vendorData, [
+            QRCodeInfo(data: .string("myData"), tag: 130),
+            QRCodeInfo(data: .int32(12), tag: 131),
+        ])
+    }
+    
     func testQRCodeParserError() {
         let invalidString = "MT:R5L90MP500K64J0000."
         do {

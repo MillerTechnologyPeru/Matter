@@ -9,7 +9,9 @@
 
 // MARK: - String
 
-internal extension std.string {
+internal typealias CXXString = std.string
+
+internal extension CXXString {
     
     init(_ string: String) {
         self.init()
@@ -21,7 +23,7 @@ internal extension std.string {
 
 internal extension String {
     
-    init(cxxString: std.string) {
+    init(cxxString: CXXString) {
         self.init(cString: cxxString.c_str())
     }
 }
