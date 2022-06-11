@@ -19,7 +19,7 @@ internal final class ManualSetupPayloadParser: CXXReference {
     }
     
     init(decimal string: String) {
-        self.cxxObject = CXXObject(std.string(string))
+        self.cxxObject = CXXObject(string.toCXX())
     }
     
     func populatePayload() throws -> SetupPayload {

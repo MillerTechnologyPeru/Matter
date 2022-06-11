@@ -133,7 +133,7 @@ internal extension chip.OptionalQRCodeInfo {
         self.type = .init(value.data.type.rawValue)
         switch value.data {
         case let .string(string):
-            self.data = .init(string)
+            self.data = string.toCXX()
         case let .int32(value):
             self.int32 = value
         case let .uint32(value):

@@ -130,11 +130,11 @@ extension SetupPayload: ReferenceConvertible {
         }
         
         func addSerialNumber(_ serialNumber: String) throws {
-            try cxxObject.addSerialNumber(std.string(serialNumber)).throwError()
+            try cxxObject.addSerialNumber(serialNumber.toCXX()).throwError()
         }
         
         func addOptionalVendorData(_ string: String, tag: UInt8) throws {
-            try cxxObject.addOptionalVendorData(tag, std.string(string)).throwError()
+            try cxxObject.addOptionalVendorData(tag, serialNumber.toCXX()).throwError()
         }
         
         func addOptionalVendorData(_ value: Int32, tag: UInt8) throws {

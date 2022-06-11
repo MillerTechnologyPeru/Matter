@@ -20,7 +20,7 @@ internal final class QRCodeSetupPayloadParser: CXXReference {
     
     init(base38Encoded string: String) {
         let _ = MemoryAllocator.initialize
-        self.cxxObject = CXXObject(std.string(string))
+        self.cxxObject = CXXObject(string.toCXX())
     }
     
     func populatePayload() throws -> SetupPayload {
