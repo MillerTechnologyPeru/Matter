@@ -70,11 +70,24 @@ public struct MatterError: Error {
 
 internal extension CHIP_ERROR {
     
+    #if DEBUG
+    func throwError(
+        file: StaticString = #file,
+        function: StaticString = #function,
+        line: UInt = #line
+    ) throws {
+        guard self.AsInteger() == 0 else {
+            NSLog("\(file):\(line):\(function) Matter error 0x\(String(self.AsInteger(), radix: 16))")
+            throw MatterError(self)
+        }
+    }
+    #else
     func throwError() throws {
         guard self.AsInteger() == 0 else {
             throw MatterError(self)
         }
     }
+    #endif
 }
 
 // MARK: - Equatable
