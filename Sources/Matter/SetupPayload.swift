@@ -26,6 +26,8 @@ public struct SetupPayload: Equatable, Hashable, Codable {
     
     public var serialNumber: String?
     
+    public var vendorData: [QRCodeInfo]
+    
     init(version: UInt8,
          vendorID: UInt16,
          productID: UInt16,
@@ -33,7 +35,8 @@ public struct SetupPayload: Equatable, Hashable, Codable {
          rendezvousInformation: RendezvousInformationFlags = [],
          discriminator: UInt16,
          setupPinCode: UInt32,
-         serialNumber: String? = nil
+         serialNumber: String? = nil,
+         vendorData: [QRCodeInfo] = []
     ) {
         self.version = version
         self.vendorID = vendorID
@@ -43,6 +46,7 @@ public struct SetupPayload: Equatable, Hashable, Codable {
         self.discriminator = discriminator
         self.setupPinCode = setupPinCode
         self.serialNumber = serialNumber
+        self.vendorData = vendorData
     }
 }
 
@@ -137,6 +141,21 @@ extension SetupPayload: ReferenceConvertible {
             try cxxObject.addOptionalVendorData(tag, value).throwError()
         }
         
+        func addOptionalVendorData(_ value: QRCodeInfoData, tag: UInt8) throws {
+            switch value {
+            case let .string(value):
+                try addOptionalVendorData(value, tag: tag)
+            case let .int32(value):
+                try addOptionalVendorData(value, tag: tag)
+            case let .uint32(value):
+                try addOptionalVendorData(.init(bitPattern: value), tag: tag)
+            case let .int64(value):
+                try addOptionalVendorData(numericCast(value), tag: tag)
+            case let .uint64(value):
+                try addOptionalVendorData(numericCast(Int64(bitPattern: value)), tag: tag)
+            }
+        }
+        
         func removeOptionalVendorData(for tag: UInt8) throws {
             try cxxObject.removeOptionalVendorData(tag).throwError()
         }
@@ -154,6 +173,7 @@ internal extension SetupPayload {
         self.discriminator = object.discriminator
         self.setupPinCode = object.setupPinCode
         self.serialNumber = try? object.serialNumber
+        self.vendorData = object.allOptionalVendorData
     }
 }
 
@@ -171,6 +191,10 @@ internal extension SetupPayload.ReferenceType {
         if let serialNumber = value.serialNumber {
             do { try self.addSerialNumber(serialNumber) }
             catch { assertionFailure("Unable to add serial number. \(error)") }
+        }
+        value.vendorData.forEach {
+            do { try self.addOptionalVendorData($0.data, tag: $0.tag) }
+            catch { assertionFailure("Unable to add optional vendor data. \(error)") }
         }
     }
 }

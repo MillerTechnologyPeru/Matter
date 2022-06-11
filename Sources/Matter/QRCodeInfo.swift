@@ -7,7 +7,7 @@
 
 @_implementationOnly import CMatter
 
-public struct QRCodeInfo: Equatable, Hashable {
+public struct QRCodeInfo: Equatable, Hashable, Codable {
     
     public var data: QRCodeInfoData
     
@@ -28,7 +28,54 @@ public enum QRCodeInfoData: Equatable, Hashable {
     case uint64(UInt64)
 }
 
-public enum QRCodeInfoType: UInt32 {
+extension QRCodeInfoData: Codable {
+    
+    enum CodingKeys: String, CodingKey {
+        case type
+        case value
+    }
+    
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let type = try container.decode(QRCodeInfoType.self, forKey: .type)
+        switch type {
+        case .string:
+            let value = try container.decode(String.self, forKey: .value)
+            self = .string(value)
+        case .int32:
+            let value = try container.decode(Int32.self, forKey: .value)
+            self = .int32(value)
+        case .uint32:
+            let value = try container.decode(UInt32.self, forKey: .value)
+            self = .uint32(value)
+        case .int64:
+            let value = try container.decode(Int64.self, forKey: .value)
+            self = .int64(value)
+        case .uint64:
+            let value = try container.decode(UInt64.self, forKey: .value)
+            self = .uint64(value)
+        }
+    }
+    
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(type, forKey: .type)
+        switch self {
+        case let .string(value):
+            try container.encode(value, forKey: .value)
+        case let .int32(value):
+            try container.encode(value, forKey: .value)
+        case let .uint32(value):
+            try container.encode(value, forKey: .value)
+        case let .int64(value):
+            try container.encode(value, forKey: .value)
+        case let .uint64(value):
+            try container.encode(value, forKey: .value)
+        }
+    }
+}
+
+public enum QRCodeInfoType: UInt32, Codable {
     
     case string
     case int32
@@ -68,25 +115,17 @@ internal extension chip.OptionalQRCodeInfo {
         self.init()
         self.tag = value.tag
         self.type = .init(value.data.type.rawValue)
-        /*
-        switch value {
+        switch value.data {
         case let .string(string):
-            self.type = .init(QRCodeInfoType.string.rawValue)
-            string.withCString { cString in
-                self.data = std.string.init(cString)
-            }
+            self.data = .init(string)
         case let .int32(value):
-            //self.int32 = value
-            break
+            self.int32 = value
         case let .uint32(value):
-            //self.uint32 = numericCast(value)
-            break
+            self.int32 = .init(bitPattern: value)
         case let .int64(value):
-            //self.int64 = value
-            break
+            self.int32 = numericCast(value)
         case let .uint64(value):
-            //self.uint64 = value
-            break
-        }*/
+            self.int32 = .init(bitPattern: numericCast(value))
+        }
     }
 }
