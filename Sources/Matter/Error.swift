@@ -18,7 +18,7 @@ import Foundation
  * CHIP SDK errors inside Range::kSDK consist of a component identifier given by SdkPart and an arbitrary small
  * integer Code.
  */
-public struct MatterError: Error {
+public struct MatterError: Error, Equatable, Hashable {
     
     /// Underlying error code from Matter framework
     public typealias Code = MatterErrorCode
@@ -26,15 +26,19 @@ public struct MatterError: Error {
     /// Error category
     public typealias Range = MatterErrorRange
     
-    internal let object: ReferenceType
+    /// SDK error
+    public typealias SDKErrorType = MatterSDKErrorType
     
-    internal init(_ object: ReferenceType) {
-        self.object = object
-    }
+    internal typealias CXXObject = CHIP_ERROR
     
-    internal init(_ cxxObject: ReferenceType.CXXObject) {
-        self.init(ReferenceType(cxxObject))
-    }
+    /// Return an integer code for the error.
+    public let code: MatterErrorCode
+    
+    /// File
+    //public let file: String
+    
+    /// Line
+    //public let line: UInt
     
     /**
      * Construct a CHIP_ERROR from the underlying storage type.
@@ -42,29 +46,53 @@ public struct MatterError: Error {
      * @note
      *  This is intended to be used only in foreign function interfaces.
      */
-    internal init(_ code: Code) {
+    public init(
+        code: MatterErrorCode
+        //file: String = #file,
+        //line: UInt = #line
+    ) {
         assert(code.rawValue != 0)
-        self.init(ReferenceType(code))
+        self.code = code
+        //self.file = file
+        //self.line = line
     }
     
-    internal init(_ code: Code, range: Range, file: StaticString = #file, line: UInt = #line) {
-        assert(code.rawValue != 0)
-        self.init(ReferenceType(code, range: range, file: file, line: line))
+    internal init(_ cxxObject: CXXObject) {
+        let code = MatterErrorCode(rawValue: cxxObject.AsInteger())
+        self.init(
+            code: code
+            //file: String(cString: cxxObject.getFile()),
+            //line: UInt(cxxObject.GetLine())
+        )
     }
     
-    /// Return an integer code for the error.
-    public var code: Code {
-        return object.code
+    internal init(sdk: SDKErrorType, code: UInt8) {
+        let cxxSdkPart = CXXObject.SdkPart(sdk)
+        let cxxObject = CXXObject(cxxSdkPart, code)
+        self.init(cxxObject)
     }
     
     /// Get the Range to which the error belongs.
     public var range: Range {
-        return object.range
+        let cxxObject = CXXObject(code.rawValue)
+        return Range(cxxObject.GetRange())
+    }
+}
+
+extension MatterError: CustomStringConvertible, CustomDebugStringConvertible {
+    
+    internal static let registerFormatter: Void = {
+        chip.RegisterCHIPLayerErrorFormatter()
+    }()
+    
+    public var description: String {
+        let _ = Self.registerFormatter
+        let cxxObject = CXXObject(code.rawValue)
+        return String(cString: cxxObject.AsString())
     }
     
-    /// Format an error as a string for printing.
-    internal var message: String {
-        return object.message
+    public var debugDescription: String {
+        description
     }
 }
 
@@ -90,70 +118,6 @@ internal extension CHIP_ERROR {
     #endif
 }
 
-// MARK: - Equatable
-
-extension MatterError: Equatable {
-    
-    public static func == (lhs: MatterError, rhs: MatterError) -> Bool {
-        lhs.object.cxxObject.isEqual(rhs.object.cxxObject)
-    }
-}
-
-// MARK: - CustomStringConvertible
-
-extension MatterError: CustomStringConvertible, CustomDebugStringConvertible {
-    
-    public var description: String {
-        return message
-    }
-    
-    public var debugDescription: String {
-        return description
-    }
-}
-
-// MARK: - ReferenceConvertible
-
-extension MatterError: ReferenceConvertible {
-    
-    final class ReferenceType: CXXReference {
-        
-        typealias CXXObject = CHIP_ERROR
-        
-        let cxxObject: CXXObject
-        
-        init(_ cxxObject: CXXObject) {
-            self.cxxObject = cxxObject
-        }
-        
-        init(_ code: Code, range: Range, file: StaticString = #file, line: UInt = #line) {
-            let cxxObject = file.withUTF8Buffer { fileBuffer in
-                CHIP_ERROR(CHIP_ERROR.Range(range), code.rawValue, fileBuffer.baseAddress, numericCast(line))
-            }
-            self.cxxObject = cxxObject
-        }
-        
-        init(_ code: Code) {
-            self.cxxObject = CHIP_ERROR(code.rawValue)
-        }
-        
-        /// Return an integer code for the error.
-        var code: Code {
-            return Code(rawValue: cxxObject.AsInteger())
-        }
-        
-        /// Get the Range to which the error belongs.
-        var range: Range {
-            return Range(cxxObject.GetRange())
-        }
-        
-        /// Format an error as a string for printing.
-        var message: String {
-            return String(cString: cxxObject.AsString())
-        }
-    }
-}
-
 // Use "hidden" entry points for `NSError` bridging
 extension MatterError {
     
@@ -177,13 +141,6 @@ public struct MatterErrorCode: RawRepresentable, Equatable, Hashable {
     }
 }
 
-extension MatterErrorCode: ExpressibleByIntegerLiteral {
-    
-    public init(integerLiteral value: UInt32) {
-        self.init(rawValue: value)
-    }
-}
-
 public extension MatterErrorCode {
     
     /// Match error code
@@ -193,29 +150,38 @@ public extension MatterErrorCode {
     }
 }
 
+public extension MatterErrorCode {
+    
+    static func sdk(_ sdk: MatterSDKErrorType, code: UInt8) -> MatterErrorCode {
+        let cxxSdkPart = MatterError.CXXObject.SdkPart(sdk)
+        let cxxObject = MatterError.CXXObject(cxxSdkPart, code)
+        return MatterErrorCode(cxxObject.AsInteger())
+    }
+}
+
 public extension MatterError {
     
     /// A message exceeds the sent limit.
-    static var sendingBlocked: MatterErrorCode                          { 0x01 }
+    static var sendingBlocked: MatterErrorCode                          { .sdk(.core, code: 0x01) }
     
     /// A connection has been aborted.
-    static var connectionAborted: MatterErrorCode                       { 0x02 }
+    static var connectionAborted: MatterErrorCode                       { .sdk(.core, code: 0x02) }
     
     /// An unexpected state was encountered.
-    static var incorrectState: MatterErrorCode                          { 0x03 }
+    static var incorrectState: MatterErrorCode                          { .sdk(.core, code: 0x03) }
     
     /// A message is too long.
-    static var messageTooLong: MatterErrorCode                          { 0x04 }
+    static var messageTooLong: MatterErrorCode                          { .sdk(.core, code: 0x04) }
     
     /// An exchange version is not supported.
-    static var unsupportedExchangeVersion: MatterErrorCode              { 0x05 }
+    static var unsupportedExchangeVersion: MatterErrorCode              { .sdk(.core, code: 0x05) }
     
     /// The attempt to register an unsolicited message handler failed because the
     /// unsolicited message handler pool is full.
-    static var tooManyUnsolicitedMessageHandlers: MatterErrorCode       { 0x06 }
+    static var tooManyUnsolicitedMessageHandlers: MatterErrorCode       { .sdk(.core, code: 0x06) }
     
     /// No callback has been registered for handling a connection.
-    static var noUnsolicitedMessageHandler: MatterErrorCode             { 0x07 }
+    static var noUnsolicitedMessageHandler: MatterErrorCode             { .sdk(.core, code: 0x07) }
 }
 
 // MARK: - Range
@@ -259,5 +225,47 @@ internal extension CHIP_ERROR.Range {
     
     init(_ range: MatterErrorRange) {
         self.init(rawValue: range.rawValue)!
+    }
+}
+
+/// SDK Error Type
+public enum MatterSDKErrorType: UInt8 {
+    
+    /// SDK core errors.
+    case core                       = 0
+    
+    /// Inet errors
+    case inet                       = 1
+    
+    /// Device layer errors
+    case device                     = 2
+    
+    /// ASN1 errors
+    case asn1                       = 3
+    
+    /// Bluetooth LE layer errors
+    case bluetooth                  = 4
+    
+    /// Interaction Model global status code
+    case interactionModelGlobal     = 5
+    
+    /// Interaction Model cluster-specific status code.
+    case interactionModelCluster    = 6
+    
+    /// Application-defined errors
+    case application                = 7
+}
+
+internal extension MatterSDKErrorType {
+    
+    init(_ sdkPart: CHIP_ERROR.Range) {
+        self.init(rawValue: sdkPart.rawValue)!
+    }
+}
+
+internal extension CHIP_ERROR.SdkPart {
+    
+    init(_ sdkPart: MatterSDKErrorType) {
+        self.init(rawValue: sdkPart.rawValue)!
     }
 }
