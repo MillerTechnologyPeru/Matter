@@ -53,6 +53,7 @@ final class SetupPayloadTests: XCTestCase {
             QRCodeInfo(data: .string("myData"), tag: 130),
             QRCodeInfo(data: .int32(12), tag: 131),
         ])
+        XCTAssertEqual(try payload.generateQRCode(), base38String)
     }
     
     func testQRCodeParserError() {
