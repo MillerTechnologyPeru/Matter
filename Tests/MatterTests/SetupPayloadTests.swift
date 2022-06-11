@@ -24,7 +24,7 @@ final class SetupPayloadTests: XCTestCase {
         XCTAssertEqual(payload.productID, 1)
         XCTAssertEqual(payload.commissioningFlow, .standard)
         XCTAssertEqual(payload.rendezvousInformation, [.softAP])
-        XCTAssertEqual(try payload.generateQRCode(allowInvalid: true), base38String)
+        XCTAssertEqual(try payload.generateQRCode(), base38String)
         
         #if canImport(CHIP)
         let chipPayload = try CHIPQRCodeSetupPayloadParser(base38Representation: base38String).populatePayload()
@@ -64,6 +64,7 @@ final class SetupPayloadTests: XCTestCase {
         XCTAssertEqual(payload.productID, 1)
         XCTAssertEqual(payload.commissioningFlow, .custom)
         XCTAssertEqual(payload.rendezvousInformation, [])
+        XCTAssertEqual(try payload.generateManualCode(), string)
         
         #if canImport(CHIP)
         let chipPayload = try CHIPManualSetupPayloadParser(decimalStringRepresentation: string).populatePayload()

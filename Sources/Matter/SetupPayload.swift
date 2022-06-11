@@ -172,6 +172,23 @@ internal extension SetupPayload.ReferenceType {
         self.rendezvousInformation = value.rendezvousInformation
         self.discriminator = value.discriminator
         self.setupPinCode = value.setupPinCode
+        // TODO: serialNumber
         //self.serialNumber = value.serialNumber
+    }
+}
+
+internal extension chip.PayloadContents {
+    
+    init(_ value: SetupPayload) {
+        self.init(
+            version: value.version,
+            vendorID: value.vendorID,
+            productID: value.productID,
+            commissioningFlow: .init(value.commissioningFlow),
+            rendezvousInformation: .init(value.rendezvousInformation),
+            discriminator: value.discriminator,
+            setUpPINCode: value.setupPinCode,
+            isShortDiscriminator: false // TODO: isShortDiscriminator
+        )
     }
 }
