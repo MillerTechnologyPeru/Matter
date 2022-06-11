@@ -124,6 +124,11 @@ extension SetupPayload: ReferenceConvertible {
             return (0 ..< cxxVector.size())
                 .map { QRCodeInfo(cxxVector[$0]) }
         }
+        
+        func addSerialNumber(_ serialNumber: String) throws {
+            try cxxObject.addSerialNumber(std.string(serialNumber)).throwError()
+        }
+        
         /*
         func addOptionalVendorData(_ string: String, tag: UInt8) throws {
             try string.withCString {
@@ -139,11 +144,7 @@ extension SetupPayload: ReferenceConvertible {
             try cxxObject.removeOptionalVendorData(tag).throwError()
         }
         
-        func addSerialNumber(_ serialNumber: String) throws {
-            try serialNumber.withCString {
-                try cxxObject.addSerialNumber(std.string($0)).throwError()
-            }
-        }*/
+        */
     }
 }
 
@@ -172,8 +173,10 @@ internal extension SetupPayload.ReferenceType {
         self.rendezvousInformation = value.rendezvousInformation
         self.discriminator = value.discriminator
         self.setupPinCode = value.setupPinCode
-        // TODO: serialNumber
-        //self.serialNumber = value.serialNumber
+        if let serialNumber = value.serialNumber {
+            do { try self.addSerialNumber(serialNumber) }
+            catch { assertionFailure("Unable to add serial number. \(error)") }
+        }
     }
 }
 
