@@ -134,6 +134,7 @@ internal extension chip.OptionalQRCodeInfo {
         switch value.data {
         case let .string(string):
             self.data = string.toCXX()
+            assert(String(cxxString: self.data) == string)
         case let .int32(value):
             self.int32 = value
         case let .uint32(value):

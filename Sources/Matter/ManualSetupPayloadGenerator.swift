@@ -20,13 +20,8 @@ internal final class ManualSetupPayloadGenerator: CXXReference {
     
     init(payload: SetupPayload) {
         let _ = MemoryAllocator.initialize
-        #if swift(>=5.7)
         let cxxPayload = chip.PayloadContents(payload)
         self.cxxObject = CXXObject(cxxPayload)
-        #else
-        var cxxPayload = chip.PayloadContents(payload)
-        self.cxxObject = CXXObject(&cxxPayload)
-        #endif
     }
     
     func generateDecimalString() throws -> String {

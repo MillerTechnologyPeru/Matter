@@ -21,18 +21,15 @@ internal final class QRCodeSetupPayloadGenerator: CXXReference {
     init(payload: SetupPayload) {
         let _ = MemoryAllocator.initialize
         let payloadObject = SetupPayload.ReferenceType(payload)
-        #if swift(>=5.7)
         self.cxxObject = CXXObject(payloadObject.cxxObject)
-        #else
-        var cxxPayload = payloadObject.cxxObject
-        self.cxxObject = CXXObject(&cxxPayload)
-        #endif
     }
     
+    /// This function is called to encode the binary data of a payload to a base38 null-terminated string using CHIP TLV encoding scheme.
     func generateBase38EncodedString() throws -> String {
         var cxxString = std.string()
-        cxxString.reserve(128)
-        try cxxObject.payloadBase38Representation(&cxxString).throwError()
+        var data = [UInt8]()
+        data.reserveCapacity(128)
+        try cxxObject.payloadBase38Representation(&cxxString, &data, UInt32(data.capacity)).throwError()
         return String(cxxString: cxxString)
     }
     
