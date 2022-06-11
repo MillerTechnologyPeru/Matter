@@ -129,11 +129,8 @@ extension SetupPayload: ReferenceConvertible {
             try cxxObject.addSerialNumber(std.string(serialNumber)).throwError()
         }
         
-        /*
         func addOptionalVendorData(_ string: String, tag: UInt8) throws {
-            try string.withCString {
-                try cxxObject.addOptionalVendorData(tag, std.string($0)).throwError()
-            }
+            try cxxObject.addOptionalVendorData(tag, std.string(string)).throwError()
         }
         
         func addOptionalVendorData(_ value: Int32, tag: UInt8) throws {
@@ -143,8 +140,6 @@ extension SetupPayload: ReferenceConvertible {
         func removeOptionalVendorData(for tag: UInt8) throws {
             try cxxObject.removeOptionalVendorData(tag).throwError()
         }
-        
-        */
     }
 }
 
