@@ -1,17 +1,14 @@
 //
-//  VendorID.swift
+//  ProductID.swift
 //  
 //
 //  Created by Alsey Coleman Miller on 6/14/22.
 //
 
-
 /**
- A Vendor Identifier (Vendor ID or VID) is a 16-bit number that uniquely identifies a particular product manufacturer, vendor, or group thereof.
- 
- Each Vendor ID is statically allocated by the [Connectivity Standards Alliance](https://groups.csa-iot.org).
+ A Product Identifier (Product ID or PID) is a 16-bit number that uniquely identifies a product of a vendor.
  */
-public struct VendorID: RawRepresentable, Equatable, Hashable, Codable {
+public struct ProductID: RawRepresentable, Equatable, Hashable, Codable {
     
     public let rawValue: UInt16
     
@@ -26,7 +23,7 @@ public struct VendorID: RawRepresentable, Equatable, Hashable, Codable {
 
 // MARK: - ExpressibleByIntegerLiteral
 
-extension VendorID: ExpressibleByIntegerLiteral {
+extension ProductID: ExpressibleByIntegerLiteral {
     
     public init(integerLiteral value: UInt16) {
         self.init(rawValue: value)
@@ -35,7 +32,7 @@ extension VendorID: ExpressibleByIntegerLiteral {
 
 // MARK: - CustomStringConvertible
 
-extension VendorID: CustomStringConvertible, CustomDebugStringConvertible {
+extension ProductID: CustomStringConvertible, CustomDebugStringConvertible {
     
     public var description: String {
         rawValue.description
@@ -48,8 +45,8 @@ extension VendorID: CustomStringConvertible, CustomDebugStringConvertible {
 
 // MARK: - Definitions
 
-public extension VendorID {
+public extension ProductID {
     
-    /// Matter Standard
-    static var matter: VendorID { 0x00 }
+    /// Anonymized Product ID as part of device discovery.
+    static var any: VendorID { 0x00 }
 }
