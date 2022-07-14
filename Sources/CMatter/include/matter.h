@@ -13,13 +13,16 @@
 #include <lib/core/CHIPConfig.h>
 #include <lib/core/CHIPError.h>
 
+// BLE
+#include <ble/Ble.h>
+
 // Setup Payload
-#import <setup_payload/SetupPayload.h>
-#import <setup_payload/QRCodeSetupPayloadParser.h>
-#import <setup_payload/QRCodeSetupPayloadGenerator.h>
-#import <setup_payload/ManualSetupPayloadParser.h>
-#import <setup_payload/ManualSetupPayloadGenerator.h>
+#include <setup_payload/SetupPayload.h>
+#include <setup_payload/QRCodeSetupPayloadParser.h>
+#include <setup_payload/QRCodeSetupPayloadGenerator.h>
+#include <setup_payload/ManualSetupPayloadParser.h>
+#include <setup_payload/ManualSetupPayloadGenerator.h>
 
 // Swift helpers
-#import <swift/Error-Swift.h>
-#import <swift/SetupPayload-Swift.h>
+#include <swift/Error-Swift.h>
+#include <swift/SetupPayload-Swift.h>

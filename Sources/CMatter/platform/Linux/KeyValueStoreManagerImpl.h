@@ -16,9 +16,14 @@
  *    limitations under the License.
  */
 
+/**
+ *    @file
+ *          Platform-specific implementation of KVS for linux.
+ */
+
 #pragma once
 
-#include <platform/KeyValueStoreManager.h>
+#include <platform/Linux/CHIPLinuxStorage.h>
 
 namespace chip {
 namespace DeviceLayer {
@@ -27,14 +32,19 @@ namespace PersistedStorage {
 class KeyValueStoreManagerImpl : public KeyValueStoreManager
 {
 public:
-    CHIP_ERROR _Get(const char * key, void * value, size_t value_size, size_t * read_bytes_size = nullptr, size_t offset = 0)
-    {
-        return CHIP_ERROR_NOT_IMPLEMENTED;
-    }
-    CHIP_ERROR _Delete(const char * key) { return CHIP_ERROR_NOT_IMPLEMENTED; }
-    CHIP_ERROR _Put(const char * key, const void * value, size_t value_size) { return CHIP_ERROR_NOT_IMPLEMENTED; }
+    /**
+     * @brief
+     * Initalize the KVS, must be called before using.
+     */
+    CHIP_ERROR Init(const char * file) { return mStorage.Init(file); }
+
+    CHIP_ERROR _Get(const char * key, void * value, size_t value_size, size_t * read_bytes_size = nullptr, size_t offset = 0);
+    CHIP_ERROR _Delete(const char * key);
+    CHIP_ERROR _Put(const char * key, const void * value, size_t value_size);
 
 private:
+    DeviceLayer::Internal::ChipLinuxStorage mStorage;
+
     // ===== Members for internal use by the following friends.
     friend KeyValueStoreManager & KeyValueStoreMgr();
     friend KeyValueStoreManagerImpl & KeyValueStoreMgrImpl();
