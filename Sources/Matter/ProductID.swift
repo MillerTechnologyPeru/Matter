@@ -6,7 +6,7 @@
 //
 
 /**
- A Product Identifier (Product ID or PID) is a 16-bit number that uniquely identifies a product of a vendor.
+ A Product ID  is a 16-bit number that uniquely identifies a product of a vendor.
  */
 public struct ProductID: RawRepresentable, Equatable, Hashable, Codable {
     

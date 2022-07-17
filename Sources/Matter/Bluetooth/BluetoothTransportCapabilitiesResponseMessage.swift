@@ -13,7 +13,7 @@ public struct BluetoothTransportCapabilitiesResponseMessage {
      *  The lower 4 bits specify the BLE transport protocol version that the BLE
      *  peripheral has selected for this connection.
      *
-     *  A value of kBleTransportProtocolVersion_None means that no supported
+     *  A value of 0 means that no supported
      *  protocol version was found in the central's capabilities request. The
      *  central should unsubscribe after such a response has been sent to free
      *  up the peripheral for connections from devices with supported protocol

@@ -7,7 +7,7 @@
 
 
 /**
- A Vendor Identifier (Vendor ID or VID) is a 16-bit number that uniquely identifies a particular product manufacturer, vendor, or group thereof.
+ A Vendor ID is a 16-bit number that uniquely identifies a particular product manufacturer, vendor, or group thereof.
  
  Each Vendor ID is statically allocated by the [Connectivity Standards Alliance](https://groups.csa-iot.org).
  */

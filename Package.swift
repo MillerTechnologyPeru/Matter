@@ -18,6 +18,10 @@ let package = Package(
             name: "Matter",
             targets: ["Matter"]
         ),
+        .executable(
+            name: "MatterTool",
+            targets: ["MatterTool"]
+        )
     ],
     dependencies: [
         .package(
@@ -59,13 +63,14 @@ let package = Package(
                 .define("CHIP_MINMDNS_HIGH_VERBOSITY"),
                 .define("CHIP_ADDRESS_RESOLVE_IMPL_INCLUDE_HEADER", to: #""lib/address_resolve/AddressResolve_DefaultImpl.h""#),
                 .headerSearchPath("."),
+                .headerSearchPath("deps"),
                 .headerSearchPath("deps/nlassert/include"),
                 .headerSearchPath("deps/nlio/include"),
+                .headerSearchPath("app-main"),
                 .unsafeFlags([
-                    "-I", "/opt/homebrew/Cellar/openssl@3/3.0.3/include",
+                    "-I", "/opt/homebrew/Cellar/openssl@3/3.0.5/include",
                     //"-I", "/usr/local/opt/openssl/include",
                 ], .when(platforms: [.macOS])),
-                
             ]
         ),
         .systemLibrary(
@@ -74,6 +79,12 @@ let package = Package(
             providers: [
                 .brew(["openssl"]),
                 .apt(["openssl libssl-dev"]),
+            ]
+        ),
+        .executableTarget(
+            name: "MatterTool",
+            dependencies: [
+                "Matter",
             ]
         ),
         .testTarget(

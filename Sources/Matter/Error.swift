@@ -79,6 +79,13 @@ public struct MatterError: Error, Equatable, Hashable {
     }
 }
 
+internal extension MatterError {
+    
+    static var none: MatterError {
+        MatterError(code: MatterErrorCode(rawValue: 0))
+    }
+}
+
 extension MatterError: CustomStringConvertible, CustomDebugStringConvertible {
     
     internal static let registerFormatter: Void = {
