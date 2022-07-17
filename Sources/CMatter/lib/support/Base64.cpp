@@ -329,7 +329,7 @@ void TestBase64(const char * test, bool base64URL = false)
     printf("\n");
 }
 
-int main(int argc, char * argv[])
+int main_base64(int argc, char * argv[])
 {
     TestBase64("");
     TestBase64("Zg==");

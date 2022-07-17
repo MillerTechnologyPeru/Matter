@@ -26,3 +26,6 @@
 // Swift helpers
 #include <swift/Error-Swift.h>
 #include <swift/SetupPayload-Swift.h>
+
+// App
+#include <app/App.h>
