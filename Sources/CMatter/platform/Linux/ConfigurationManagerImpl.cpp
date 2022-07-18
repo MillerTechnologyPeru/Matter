@@ -357,12 +357,12 @@ void ConfigurationManagerImpl::DoFactoryReset(intptr_t arg)
 
 CHIP_ERROR ConfigurationManagerImpl::GetVendorId(uint16_t & vendorId)
 {
-    return CHIPConfigurationManagerGetVendorId(vendorId);
+    return CHIP_ERROR(CHIPConfigurationManagerGetVendorId(&vendorId));
 }
 
 CHIP_ERROR ConfigurationManagerImpl::GetProductId(uint16_t & productId)
 {
-    return ReadConfigValue(PosixConfig::kConfigKey_ProductId, productId);
+    return CHIP_ERROR(CHIPConfigurationManagerGetProductId(&productId));
 }
 
 CHIP_ERROR ConfigurationManagerImpl::StoreVendorId(uint16_t vendorId)
