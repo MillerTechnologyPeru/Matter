@@ -15,11 +15,26 @@ struct MatterTool: MatterApp {
         vendorID: 0,
         productID: 0
     )
+    
+    static let deviceInfo = AppDeviceInfo(
+        serialNumber: "123456789",
+        manufacturingDate: (year: 2022, month: 0, day: 1),
+        hardwareVersion: 0x01
+    )
 }
 
-struct AppConfiguration: AppConfigurationManager {
+struct AppConfiguration: ConfigurationManager {
     
     let vendorID: VendorID
     
     let productID: ProductID
+}
+
+struct AppDeviceInfo: DeviceInstanceInfoProvider {
+    
+    let serialNumber: String
+    
+    let manufacturingDate: (year: UInt16, month: UInt8, day: UInt8)
+    
+    let hardwareVersion: UInt16
 }

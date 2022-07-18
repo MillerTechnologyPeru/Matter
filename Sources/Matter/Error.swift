@@ -189,6 +189,9 @@ public extension MatterError {
     
     /// No callback has been registered for handling a connection.
     static var noUnsolicitedMessageHandler: MatterErrorCode             { .sdk(.core, code: 0x07) }
+    
+    /// A buffer is too small.
+    static var bufferTooSmall: MatterErrorCode                          { .sdk(.core, code: 0x19) }
 }
 
 // MARK: - Range
