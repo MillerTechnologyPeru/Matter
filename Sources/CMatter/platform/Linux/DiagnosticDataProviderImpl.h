@@ -20,6 +20,9 @@
  *          Provides an implementation of the DiagnosticDataProvider object.
  */
 
+#ifndef DiagnosticDataProviderImpl_h
+#define DiagnosticDataProviderImpl_h
+
 #pragma once
 
 #include <memory>
@@ -35,8 +38,11 @@ namespace DeviceLayer {
 class DiagnosticDataProviderImpl : public DiagnosticDataProvider
 {
 public:
+    void DiagnosticDataProvider();
     static DiagnosticDataProviderImpl & GetDefaultInstance();
 };
 
 } // namespace DeviceLayer
 } // namespace chip
+
+#endif /* DiagnosticDataProviderImpl_h */

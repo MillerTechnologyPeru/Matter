@@ -38,3 +38,9 @@ DiagnosticDataProviderImpl & DiagnosticDataProviderImpl::GetDefaultInstance()
 
 } // namespace DeviceLayer
 } // namespace chip
+
+void CHIPSetDiagnosticDataProviderImpl()
+{
+    ::chip::DeviceLayer::DiagnosticDataProviderImpl diagnosticDataProvider;
+    SetDiagnosticDataProvider(&diagnosticDataProvider);
+}

@@ -29,8 +29,8 @@
 
 // App
 #include <app/App.h>
+#include <app/AppDiagnosticDataProvider.h>
 
 // Platform
 #include <platform/DeviceInstanceInfoProvider.h>
 #include <platform/Linux/DeviceInstanceInfoProviderImpl.h>
-
