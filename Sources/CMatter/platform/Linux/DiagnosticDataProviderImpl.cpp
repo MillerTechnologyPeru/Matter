@@ -41,6 +41,5 @@ DiagnosticDataProviderImpl & DiagnosticDataProviderImpl::GetDefaultInstance()
 
 void CHIPSetDiagnosticDataProviderImpl()
 {
-    ::chip::DeviceLayer::DiagnosticDataProviderImpl diagnosticDataProvider;
-    SetDiagnosticDataProvider(&diagnosticDataProvider);
+    SetDiagnosticDataProvider(&chip::DeviceLayer::DiagnosticDataProviderImpl::GetDefaultInstance());
 }
