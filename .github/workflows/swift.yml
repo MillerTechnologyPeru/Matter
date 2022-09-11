@@ -13,7 +13,7 @@ jobs:
         - name: Install Swift
           uses: slashmo/install-swift@v0.3.0
           with:
-            version: swift-5.7-DEVELOPMENT-SNAPSHOT-2022-06-04-a
+            version: swift-5.7-DEVELOPMENT-SNAPSHOT-2022-08-30-a
         - name: Swift Version
           run: swift --version
         - name: Install Dependencies
