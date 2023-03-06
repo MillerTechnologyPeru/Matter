@@ -25,12 +25,16 @@
 #include <app/clusters/keypad-input-server/keypad-input-server.h>
 
 #include <app-common/zap-generated/attributes/Accessors.h>
+#include <app/AttributeAccessInterface.h>
 #include <app/CommandHandler.h>
 #include <app/ConcreteCommandPath.h>
 #if CHIP_DEVICE_CONFIG_APP_PLATFORM_ENABLED
 #include <app/app-platform/ContentAppPlatform.h>
 #endif // CHIP_DEVICE_CONFIG_APP_PLATFORM_ENABLED
 #include <app/data-model/Encode.h>
+#include <app/util/af.h>
+#include <app/util/attribute-storage.h>
+#include <app/util/config.h>
 #include <platform/CHIPDeviceConfig.h>
 
 using namespace chip;
@@ -39,6 +43,7 @@ using namespace chip::app::Clusters::KeypadInput;
 #if CHIP_DEVICE_CONFIG_APP_PLATFORM_ENABLED
 using namespace chip::AppPlatform;
 #endif // CHIP_DEVICE_CONFIG_APP_PLATFORM_ENABLED
+using chip::Protocols::InteractionModel::Status;
 
 static constexpr size_t kKeypadInputDelegateTableSize =
     EMBER_AF_KEYPAD_INPUT_CLUSTER_SERVER_ENDPOINT_COUNT + CHIP_DEVICE_CONFIG_DYNAMIC_ENDPOINT_COUNT;
@@ -97,24 +102,67 @@ void SetDefaultDelegate(EndpointId endpoint, Delegate * delegate)
     }
 }
 
-bool HasFeature(chip::EndpointId endpoint, KeypadInputFeature feature)
+bool Delegate::HasFeature(chip::EndpointId endpoint, KeypadInputFeature feature)
 {
-    bool hasFeature     = false;
-    uint32_t featureMap = 0;
-
-    EmberAfStatus status = Attributes::FeatureMap::Get(endpoint, &featureMap);
-    if (EMBER_ZCL_STATUS_SUCCESS == status)
-    {
-        hasFeature = (featureMap & chip::to_underlying(feature));
-    }
-
-    return hasFeature;
+    uint32_t featureMap = GetFeatureMap(endpoint);
+    return (featureMap & chip::to_underlying(feature));
 }
 
 } // namespace KeypadInput
 } // namespace Clusters
 } // namespace app
 } // namespace chip
+
+// -----------------------------------------------------------------------------
+// Attribute Accessor Implementation
+
+namespace {
+
+class KeypadInputAttrAccess : public app::AttributeAccessInterface
+{
+public:
+    KeypadInputAttrAccess() : app::AttributeAccessInterface(Optional<EndpointId>::Missing(), KeypadInput::Id) {}
+
+    CHIP_ERROR Read(const app::ConcreteReadAttributePath & aPath, app::AttributeValueEncoder & aEncoder) override;
+
+private:
+    CHIP_ERROR ReadFeatureFlagAttribute(EndpointId endpoint, app::AttributeValueEncoder & aEncoder, Delegate * delegate);
+};
+
+KeypadInputAttrAccess gKeypadInputAttrAccess;
+
+CHIP_ERROR KeypadInputAttrAccess::Read(const app::ConcreteReadAttributePath & aPath, app::AttributeValueEncoder & aEncoder)
+{
+    EndpointId endpoint = aPath.mEndpointId;
+    Delegate * delegate = GetDelegate(endpoint);
+
+    if (isDelegateNull(delegate, endpoint))
+    {
+        return CHIP_NO_ERROR;
+    }
+
+    switch (aPath.mAttributeId)
+    {
+    case app::Clusters::KeypadInput::Attributes::FeatureMap::Id: {
+        return ReadFeatureFlagAttribute(endpoint, aEncoder, delegate);
+    }
+
+    default: {
+        break;
+    }
+    }
+
+    return CHIP_NO_ERROR;
+}
+
+CHIP_ERROR KeypadInputAttrAccess::ReadFeatureFlagAttribute(EndpointId endpoint, app::AttributeValueEncoder & aEncoder,
+                                                           Delegate * delegate)
+{
+    uint32_t featureFlag = delegate->GetFeatureMap(endpoint);
+    return aEncoder.Encode(featureFlag);
+}
+
+} // anonymous namespace
 
 // -----------------------------------------------------------------------------
 // Matter Framework Callbacks Implementation
@@ -137,9 +185,12 @@ exit:
     if (err != CHIP_NO_ERROR)
     {
         ChipLogError(Zcl, "emberAfKeypadInputClusterSendKeyCallback error: %s", err.AsString());
-        emberAfSendImmediateDefaultResponse(EMBER_ZCL_STATUS_FAILURE);
+        command->AddStatus(commandPath, Status::Failure);
     }
     return true;
 }
 
-void MatterKeypadInputPluginServerInitCallback() {}
+void MatterKeypadInputPluginServerInitCallback()
+{
+    registerAttributeAccessOverride(&gKeypadInputAttrAccess);
+}

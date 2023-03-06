@@ -39,7 +39,7 @@ class ConnectivityUtils
 {
 public:
     static CHIP_ERROR GetEthInterfaceName(char * ifname, size_t bufSize);
-    static app::Clusters::GeneralDiagnostics::InterfaceType GetInterfaceConnectionType(const char * ifname);
+    static app::Clusters::GeneralDiagnostics::InterfaceTypeEnum GetInterfaceConnectionType(const char * ifname);
 };
 
 } // namespace Internal

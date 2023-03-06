@@ -86,8 +86,18 @@ public:
         virtual void OnEndpointAdded(ClusterStateCache * cache, EndpointId endpointId){};
     };
 
-    ClusterStateCache(Callback & callback, Optional<EventNumber> highestReceivedEventNumber = Optional<EventNumber>::Missing()) :
-        mCallback(callback), mBufferedReader(*this)
+    /**
+     *
+     * @param [in] callback the derived callback which inherit from ReadClient::Callback
+     * @param [in] highestReceivedEventNumber optional highest received event number, if cache receive the events with the number
+     *             less than or equal to this value, skip those events
+     * @param [in] cacheData boolean to decide whether this cache would store attribute/event data/status,
+     *             the default is true.
+     */
+    ClusterStateCache(Callback & callback, Optional<EventNumber> highestReceivedEventNumber = Optional<EventNumber>::Missing(),
+                      bool cacheData = true) :
+        mCallback(callback),
+        mBufferedReader(*this), mCacheData(cacheData)
     {
         mHighestReceivedEventNumber = highestReceivedEventNumber;
     }
@@ -483,6 +493,12 @@ public:
         mEventStatusCache.clear();
     }
 
+    /*
+     *  Get the last concrete report data path, if path is not concrete cluster path, return CHIP_ERROR_NOT_FOUND
+     *
+     */
+    CHIP_ERROR GetLastReportDataPath(ConcreteClusterPath & aPath);
+
 private:
     using AttributeState = Variant<Platform::ScopedMemoryBufferWithSize<uint8_t>, StatusIB>;
     // mPendingDataVersion represents a tentative data version for a cluster that we have gotten some reports for.
@@ -576,9 +592,9 @@ private:
         mCallback.OnSubscriptionEstablished(aSubscriptionId);
     }
 
-    void OnResubscriptionAttempt(CHIP_ERROR aTerminationCause, uint32_t aNextResubscribeIntervalMsec) override
+    CHIP_ERROR OnResubscriptionNeeded(ReadClient * apReadClient, CHIP_ERROR aTerminationCause) override
     {
-        mCallback.OnResubscriptionAttempt(aTerminationCause, aNextResubscribeIntervalMsec);
+        return mCallback.OnResubscriptionNeeded(apReadClient, aTerminationCause);
     }
 
     void OnDeallocatePaths(chip::app::ReadPrepareParams && aReadPrepareParams) override
@@ -589,6 +605,11 @@ private:
     virtual CHIP_ERROR OnUpdateDataVersionFilterList(DataVersionFilterIBs::Builder & aDataVersionFilterIBsBuilder,
                                                      const Span<AttributePathParams> & aAttributePaths,
                                                      bool & aEncodedDataVersionList) override;
+
+    void OnUnsolicitedMessageFromPublisher(ReadClient * apReadClient) override
+    {
+        return mCallback.OnUnsolicitedMessageFromPublisher(apReadClient);
+    }
 
     // Commit the pending cluster data version, if there is one.
     void CommitPendingDataVersion();
@@ -611,6 +632,7 @@ private:
     std::map<ConcreteEventPath, StatusIB> mEventStatusCache;
     BufferedReadCallback mBufferedReader;
     ConcreteClusterPath mLastReportDataPath = ConcreteClusterPath(kInvalidEndpointId, kInvalidClusterId);
+    bool mCacheData                         = true;
 };
 
 }; // namespace app

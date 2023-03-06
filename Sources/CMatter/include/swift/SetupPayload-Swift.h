@@ -70,25 +70,25 @@ __attribute__((swift_name("setter:MatterSetupPayload.commissioningFlow(self:_:)"
     payload->commissioningFlow = commissioningFlow;
 }
 
-static inline chip::RendezvousInformationFlags MatterSetupPayloadGetRendezvousInformation(chip::SetupPayload payload)
+static inline chip::Optional<chip::RendezvousInformationFlags> MatterSetupPayloadGetRendezvousInformation(chip::SetupPayload payload)
 __attribute__((swift_name("getter:MatterSetupPayload.rendezvousInformation(self:)")))
 {
     return payload.rendezvousInformation;
 }
 
-static inline void MatterSetupPayloadSetRendezvousInformation(chip::SetupPayload* payload, chip::RendezvousInformationFlags rendezvousInformation)
+static inline void MatterSetupPayloadSetRendezvousInformation(chip::SetupPayload* payload, chip::Optional<chip::RendezvousInformationFlags> rendezvousInformation)
 __attribute__((swift_name("setter:MatterSetupPayload.rendezvousInformation(self:_:)")))
 {
     payload->rendezvousInformation = rendezvousInformation;
 }
 
-static inline uint16_t MatterSetupPayloadGetDiscriminator(chip::SetupPayload payload)
+static inline chip::SetupDiscriminator MatterSetupPayloadGetDiscriminator(chip::SetupPayload payload)
 __attribute__((swift_name("getter:MatterSetupPayload.discriminator(self:)")))
 {
     return payload.discriminator;
 }
 
-static inline void MatterSetupPayloadSetDiscriminator(chip::SetupPayload* payload, uint16_t discriminator)
+static inline void MatterSetupPayloadSetDiscriminator(chip::SetupPayload* payload, chip::SetupDiscriminator discriminator)
 __attribute__((swift_name("setter:MatterSetupPayload.discriminator(self:_:)")))
 {
     payload->discriminator = discriminator;

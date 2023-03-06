@@ -18,7 +18,7 @@
 
 #pragma once
 
-#include "lib/core/CHIPTLV.h"
+#include "lib/core/TLV.h"
 #include "system/SystemPacketBuffer.h"
 #include "system/TLVPacketBufferBackingStore.h"
 #include <app/AttributePathParams.h>
@@ -69,7 +69,12 @@ private:
     void OnReportBegin() override;
     void OnReportEnd() override;
     void OnAttributeData(const ConcreteDataAttributePath & aPath, TLV::TLVReader * apData, const StatusIB & aStatus) override;
-    void OnError(CHIP_ERROR aError) override { return mCallback.OnError(aError); }
+    void OnError(CHIP_ERROR aError) override
+    {
+        mBufferedList.clear();
+        return mCallback.OnError(aError);
+    }
+
     void OnEventData(const EventHeader & aEventHeader, TLV::TLVReader * apData, const StatusIB * apStatus) override
     {
         return mCallback.OnEventData(aEventHeader, apData, apStatus);
@@ -81,9 +86,9 @@ private:
         mCallback.OnSubscriptionEstablished(aSubscriptionId);
     }
 
-    void OnResubscriptionAttempt(CHIP_ERROR aTerminationCause, uint32_t aNextResubscribeIntervalMsec) override
+    CHIP_ERROR OnResubscriptionNeeded(ReadClient * apReadClient, CHIP_ERROR aTerminationCause) override
     {
-        mCallback.OnResubscriptionAttempt(aTerminationCause, aNextResubscribeIntervalMsec);
+        return mCallback.OnResubscriptionNeeded(apReadClient, aTerminationCause);
     }
 
     void OnDeallocatePaths(chip::app::ReadPrepareParams && aReadPrepareParams) override
@@ -102,6 +107,12 @@ private:
     {
         return mCallback.GetHighestReceivedEventNumber(aEventNumber);
     }
+
+    void OnUnsolicitedMessageFromPublisher(ReadClient * apReadClient) override
+    {
+        return mCallback.OnUnsolicitedMessageFromPublisher(apReadClient);
+    }
+
     /*
      * Given a reader positioned at a list element, allocate a packet buffer, copy the list item where
      * the reader is positioned into that buffer and add it to our buffered list for tracking.

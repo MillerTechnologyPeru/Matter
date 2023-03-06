@@ -16,6 +16,7 @@
  */
 #pragma once
 
+#include <ble/BleConfig.h>
 #include <lib/core/CHIPError.h>
 #include <lib/core/ReferenceCounted.h>
 #include <lib/support/CodeUtils.h>
@@ -47,7 +48,7 @@ public:
         mEphemeralInitiatorNodeId(ephemeralInitiatorNodeID), mSessionRole(sessionRole),
         mLastActivityTime(System::SystemClock().GetMonotonicTimestamp()),
         mLastPeerActivityTime(System::Clock::kZero), // Start at zero to default to IDLE state
-        mMRPConfig(config)
+        mRemoteMRPConfig(config)
     {}
     ~UnauthenticatedSession() override { VerifyOrDie(GetReferenceCount() == 0); }
 
@@ -66,9 +67,6 @@ public:
     }
 
     Session::SessionType GetSessionType() const override { return Session::SessionType::kUnauthenticated; }
-#if CHIP_PROGRESS_LOGGING
-    const char * GetSessionTypeString() const override { return "unauthenticated"; };
-#endif
 
     void Retain() override { ReferenceCounted<UnauthenticatedSession, NoopDeletor<UnauthenticatedSession>, 0>::Retain(); }
     void Release() override { ReferenceCounted<UnauthenticatedSession, NoopDeletor<UnauthenticatedSession>, 0>::Release(); }
@@ -90,9 +88,12 @@ public:
         switch (mPeerAddress.GetTransportType())
         {
         case Transport::Type::kUdp:
-            return GetMRPConfig().mIdleRetransTimeout * (CHIP_CONFIG_RMP_DEFAULT_MAX_RETRANS + 1);
+            return GetRetransmissionTimeout(mRemoteMRPConfig.mActiveRetransTimeout, mRemoteMRPConfig.mIdleRetransTimeout,
+                                            GetLastPeerActivityTime(), kMinActiveTime);
         case Transport::Type::kTcp:
             return System::Clock::Seconds16(30);
+        case Transport::Type::kBle:
+            return System::Clock::Milliseconds32(BTP_ACK_TIMEOUT_MS);
         default:
             break;
         }
@@ -114,16 +115,19 @@ public:
     const PeerAddress & GetPeerAddress() const { return mPeerAddress; }
     void SetPeerAddress(const PeerAddress & peerAddress) { mPeerAddress = peerAddress; }
 
-    bool IsPeerActive() { return ((System::SystemClock().GetMonotonicTimestamp() - GetLastPeerActivityTime()) < kMinActiveTime); }
-
-    System::Clock::Timestamp GetMRPBaseTimeout() override
+    bool IsPeerActive() const
     {
-        return IsPeerActive() ? GetMRPConfig().mActiveRetransTimeout : GetMRPConfig().mIdleRetransTimeout;
+        return ((System::SystemClock().GetMonotonicTimestamp() - GetLastPeerActivityTime()) < kMinActiveTime);
     }
 
-    void SetMRPConfig(const ReliableMessageProtocolConfig & config) { mMRPConfig = config; }
+    System::Clock::Timestamp GetMRPBaseTimeout() const override
+    {
+        return IsPeerActive() ? GetRemoteMRPConfig().mActiveRetransTimeout : GetRemoteMRPConfig().mIdleRetransTimeout;
+    }
 
-    const ReliableMessageProtocolConfig & GetMRPConfig() const override { return mMRPConfig; }
+    void SetRemoteMRPConfig(const ReliableMessageProtocolConfig & config) { mRemoteMRPConfig = config; }
+
+    const ReliableMessageProtocolConfig & GetRemoteMRPConfig() const override { return mRemoteMRPConfig; }
 
     PeerMessageCounter & GetPeerMessageCounter() { return mPeerMessageCounter; }
 
@@ -133,7 +137,7 @@ private:
     PeerAddress mPeerAddress;
     System::Clock::Timestamp mLastActivityTime;     ///< Timestamp of last tx or rx
     System::Clock::Timestamp mLastPeerActivityTime; ///< Timestamp of last rx
-    ReliableMessageProtocolConfig mMRPConfig;
+    ReliableMessageProtocolConfig mRemoteMRPConfig;
     PeerMessageCounter mPeerMessageCounter;
 };
 

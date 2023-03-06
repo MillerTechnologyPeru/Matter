@@ -1,6 +1,6 @@
 /*
  *
- *    Copyright (c) 2020-2021 Project CHIP Authors
+ *    Copyright (c) 2020-2022 Project CHIP Authors
  *    Copyright (c) 2013-2017 Nest Labs, Inc.
  *    All rights reserved.
  *
@@ -53,7 +53,9 @@ CHIP_ERROR ASN1Reader::Next()
     ReturnErrorCodeIf(EndOfContents, ASN1_END);
     ReturnErrorCodeIf(IndefiniteLen, ASN1_ERROR_UNSUPPORTED_ENCODING);
 
-    mElemStart += (mHeadLen + ValueLen);
+    // Note: avoid using addition assignment operator (+=), which may result in integer overflow
+    // in the right hand side of an assignment (mHeadLen + ValueLen).
+    mElemStart = mElemStart + mHeadLen + ValueLen;
 
     ResetElementState();
 
@@ -113,6 +115,8 @@ CHIP_ERROR ASN1Reader::EnterContainer(uint32_t offset)
     mElemStart = Value + offset;
     if (!IndefiniteLen)
     {
+        VerifyOrReturnError(CanCastTo<uint32_t>(mBufEnd - Value), ASN1_ERROR_VALUE_OVERFLOW);
+        VerifyOrReturnError(static_cast<uint32_t>(mBufEnd - Value) >= ValueLen, ASN1_ERROR_VALUE_OVERFLOW);
         mContainerEnd = Value + ValueLen;
     }
 
@@ -186,21 +190,8 @@ CHIP_ERROR ASN1Reader::GetUTCTime(ASN1UniversalTime & outTime)
     ReturnErrorCodeIf(ValueLen < 1, ASN1_ERROR_INVALID_ENCODING);
     ReturnErrorCodeIf(mElemStart + mHeadLen + ValueLen > mContainerEnd, ASN1_ERROR_UNDERRUN);
     VerifyOrReturnError(ValueLen == 13 && Value[12] == 'Z', ASN1_ERROR_UNSUPPORTED_ENCODING);
-    for (int i = 0; i < 12; i++)
-    {
-        VerifyOrReturnError(isdigit(Value[i]), ASN1_ERROR_INVALID_ENCODING);
-    }
 
-    outTime.Year   = static_cast<uint16_t>((Value[0] - '0') * 10 + (Value[1] - '0'));
-    outTime.Month  = static_cast<uint8_t>((Value[2] - '0') * 10 + (Value[3] - '0'));
-    outTime.Day    = static_cast<uint8_t>((Value[4] - '0') * 10 + (Value[5] - '0'));
-    outTime.Hour   = static_cast<uint8_t>((Value[6] - '0') * 10 + (Value[7] - '0'));
-    outTime.Minute = static_cast<uint8_t>((Value[8] - '0') * 10 + (Value[9] - '0'));
-    outTime.Second = static_cast<uint8_t>((Value[10] - '0') * 10 + (Value[11] - '0'));
-
-    outTime.Year = static_cast<uint16_t>(outTime.Year + ((outTime.Year >= 50) ? 1900 : 2000));
-
-    return CHIP_NO_ERROR;
+    return outTime.ImportFrom_ASN1_TIME_string(CharSpan(reinterpret_cast<const char *>(Value), ValueLen));
 }
 
 CHIP_ERROR ASN1Reader::GetGeneralizedTime(ASN1UniversalTime & outTime)
@@ -210,30 +201,18 @@ CHIP_ERROR ASN1Reader::GetGeneralizedTime(ASN1UniversalTime & outTime)
     ReturnErrorCodeIf(ValueLen < 1, ASN1_ERROR_INVALID_ENCODING);
     ReturnErrorCodeIf(mElemStart + mHeadLen + ValueLen > mContainerEnd, ASN1_ERROR_UNDERRUN);
     VerifyOrReturnError(ValueLen == 15 && Value[14] == 'Z', ASN1_ERROR_UNSUPPORTED_ENCODING);
-    for (int i = 0; i < 14; i++)
-    {
-        VerifyOrReturnError(isdigit(Value[i]), ASN1_ERROR_INVALID_ENCODING);
-    }
 
-    outTime.Year =
-        static_cast<uint16_t>((Value[0] - '0') * 1000 + (Value[1] - '0') * 100 + (Value[2] - '0') * 10 + (Value[3] - '0'));
-    outTime.Month  = static_cast<uint8_t>((Value[4] - '0') * 10 + (Value[5] - '0'));
-    outTime.Day    = static_cast<uint8_t>((Value[6] - '0') * 10 + (Value[7] - '0'));
-    outTime.Hour   = static_cast<uint8_t>((Value[8] - '0') * 10 + (Value[9] - '0'));
-    outTime.Minute = static_cast<uint8_t>((Value[10] - '0') * 10 + (Value[11] - '0'));
-    outTime.Second = static_cast<uint8_t>((Value[12] - '0') * 10 + (Value[13] - '0'));
-
-    return CHIP_NO_ERROR;
+    return outTime.ImportFrom_ASN1_TIME_string(CharSpan(reinterpret_cast<const char *>(Value), ValueLen));
 }
 
 static uint8_t ReverseBits(uint8_t v)
 {
     // swap adjacent bits
-    v = static_cast<uint8_t>((v >> 1) & 0x55) | static_cast<uint8_t>((v & 0x55) << 1);
+    v = static_cast<uint8_t>(static_cast<uint8_t>((v >> 1) & 0x55) | static_cast<uint8_t>((v & 0x55) << 1));
     // swap adjacent bit pairs
-    v = static_cast<uint8_t>((v >> 2) & 0x33) | static_cast<uint8_t>((v & 0x33) << 2);
+    v = static_cast<uint8_t>(static_cast<uint8_t>((v >> 2) & 0x33) | static_cast<uint8_t>((v & 0x33) << 2));
     // swap nibbles
-    v = static_cast<uint8_t>(v >> 4) | static_cast<uint8_t>(v << 4);
+    v = static_cast<uint8_t>(static_cast<uint8_t>(v >> 4) | static_cast<uint8_t>(v << 4));
     return v;
 }
 
@@ -303,8 +282,9 @@ CHIP_ERROR ASN1Reader::DecodeHead()
         IndefiniteLen = false;
     }
 
+    VerifyOrReturnError(CanCastTo<uint32_t>(mBufEnd - p), ASN1_ERROR_VALUE_OVERFLOW);
+    VerifyOrReturnError(static_cast<uint32_t>(mBufEnd - p) >= ValueLen, ASN1_ERROR_VALUE_OVERFLOW);
     VerifyOrReturnError(CanCastTo<uint32_t>(p - mElemStart), ASN1_ERROR_VALUE_OVERFLOW);
-
     mHeadLen = static_cast<uint32_t>(p - mElemStart);
 
     EndOfContents = (Class == kASN1TagClass_Universal && Tag == 0 && !Constructed && ValueLen == 0);

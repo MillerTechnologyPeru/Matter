@@ -34,7 +34,7 @@ final class SetupPayloadTests: XCTestCase {
         XCTAssertEqual(chipPayload.vendorID.uint16Value, payload.vendorID)
         XCTAssertEqual(chipPayload.productID.uint16Value, payload.productID)
         XCTAssertEqual(chipPayload.commissioningFlow.rawValue, numericCast(payload.commissioningFlow.rawValue))
-        XCTAssertEqual(chipPayload.rendezvousInformation?.uint8Value, payload.rendezvousInformation.rawValue)
+        XCTAssertEqual(chipPayload.rendezvousInformation?.uint8Value, payload.rendezvousInformation?.rawValue)
         #endif
     }
     

@@ -1,6 +1,7 @@
 /*
  *
- *    Copyright (c) 2021 Project CHIP Authors
+ *    Copyright (c) 2020 Project CHIP Authors
+ *    Copyright (c) 2018 Nest Labs, Inc.
  *
  *    Licensed under the Apache License, Version 2.0 (the "License");
  *    you may not use this file except in compliance with the License.
@@ -17,22 +18,23 @@
 
 /**
  *    @file
- *          Stub platform manager for fake platform.
+ *          Provides an implementation of the PlatformManager object.
  */
 
 #pragma once
 
-#include <platform/PlatformManager.h>
+#include <dispatch/dispatch.h>
+#include <platform/internal/GenericPlatformManagerImpl.h>
 
-#include <queue>
+static constexpr const char * const CHIP_CONTROLLER_QUEUE = "org.csa-iot.matter.framework.controller.workqueue";
 
 namespace chip {
 namespace DeviceLayer {
 
 /**
- * Concrete implementation of the PlatformManager singleton object for Linux platforms.
+ * Concrete implementation of the PlatformManager singleton object for Darwin platforms.
  */
-class PlatformManagerImpl final : public PlatformManager
+class PlatformManagerImpl final : public PlatformManager, public Internal::GenericPlatformManagerImpl<PlatformManagerImpl>
 {
     // Allow the PlatformManager interface class to delegate method calls to
     // the implementation methods provided by this class.
@@ -41,79 +43,61 @@ class PlatformManagerImpl final : public PlatformManager
 public:
     // ===== Platform-specific members that may be accessed directly by the application.
 
+    dispatch_queue_t GetWorkQueue()
+    {
+        if (mWorkQueue == nullptr)
+        {
+            mWorkQueue = dispatch_queue_create(CHIP_CONTROLLER_QUEUE, DISPATCH_QUEUE_SERIAL_WITH_AUTORELEASE_POOL);
+            dispatch_suspend(mWorkQueue);
+            mIsWorkQueueSuspended = true;
+        }
+        return mWorkQueue;
+    }
+
+    CHIP_ERROR PrepareCommissioning();
+
+    System::Clock::Timestamp GetStartTime() { return mStartTime; }
+
 private:
     // ===== Methods that implement the PlatformManager abstract interface.
+    CHIP_ERROR _InitChipStack();
+    void _Shutdown();
 
-    CHIP_ERROR _InitChipStack() { return CHIP_NO_ERROR; }
-    CHIP_ERROR _Shutdown() { return CHIP_NO_ERROR; }
+    CHIP_ERROR _StartChipTimer(System::Clock::Timeout delay) { return CHIP_ERROR_NOT_IMPLEMENTED; };
+    CHIP_ERROR _StartEventLoopTask();
+    CHIP_ERROR _StopEventLoopTask();
 
-    CHIP_ERROR _AddEventHandler(EventHandlerFunct handler, intptr_t arg = 0) { return CHIP_ERROR_NOT_IMPLEMENTED; }
-    void _RemoveEventHandler(EventHandlerFunct handler, intptr_t arg = 0) {}
-    void _HandleServerStarted() {}
-    void _HandleServerShuttingDown() {}
-    void _ScheduleWork(AsyncWorkFunct workFunct, intptr_t arg = 0) {}
+    void _RunEventLoop();
+    void _LockChipStack(){};
+    bool _TryLockChipStack() { return false; };
+    void _UnlockChipStack(){};
+    CHIP_ERROR _PostEvent(const ChipDeviceEvent * event);
 
-    void _RunEventLoop()
-    {
-        do
-        {
-            ProcessDeviceEvents();
-        } while (mShouldRunEventLoop);
-    }
-
-    void ProcessDeviceEvents()
-    {
-        while (!mQueue.empty())
-        {
-            const ChipDeviceEvent & event = mQueue.front();
-            _DispatchEvent(&event);
-            mQueue.pop();
-        }
-    }
-
-    CHIP_ERROR _StartEventLoopTask() { return CHIP_ERROR_NOT_IMPLEMENTED; }
-
-    CHIP_ERROR _StopEventLoopTask()
-    {
-        mShouldRunEventLoop = false;
-        return CHIP_NO_ERROR;
-    }
-
-    CHIP_ERROR _PostEvent(const ChipDeviceEvent * event)
-    {
-        mQueue.emplace(*event);
-        return CHIP_NO_ERROR;
-    }
-
-    void _DispatchEvent(const ChipDeviceEvent * event)
-    {
-        switch (event->Type)
-        {
-        case DeviceEventType::kChipLambdaEvent:
-            event->LambdaEvent();
-            break;
-
-        default:
-            break;
-        }
-    }
-
-    CHIP_ERROR _StartChipTimer(System::Clock::Timeout duration) { return CHIP_ERROR_NOT_IMPLEMENTED; }
-
-    void _LockChipStack() {}
-    bool _TryLockChipStack() { return true; }
-    void _UnlockChipStack() {}
+#if CHIP_STACK_LOCK_TRACKING_ENABLED
+    bool _IsChipStackLockedByCurrentThread() const;
+#endif
 
     // ===== Members for internal use by the following friends.
 
-    friend PlatformManager & PlatformMgr();
-    friend PlatformManagerImpl & PlatformMgrImpl();
+    friend PlatformManager & PlatformMgr(void);
+    friend PlatformManagerImpl & PlatformMgrImpl(void);
     friend class Internal::BLEManagerImpl;
 
     static PlatformManagerImpl sInstance;
 
-    bool mShouldRunEventLoop = true;
-    std::queue<ChipDeviceEvent> mQueue;
+    System::Clock::Timestamp mStartTime = System::Clock::kZero;
+
+    dispatch_queue_t mWorkQueue = nullptr;
+    // Semaphore used to implement blocking behavior in _RunEventLoop.
+    dispatch_semaphore_t mRunLoopSem;
+
+    bool mIsWorkQueueSuspended = false;
+    // TODO: mIsWorkQueueSuspensionPending might need to be an atomic and use
+    // atomic ops, if we're worried about calls to StopEventLoopTask() from
+    // multiple threads racing somehow...
+    bool mIsWorkQueueSuspensionPending = false;
+
+    inline ImplClass * Impl() { return static_cast<PlatformManagerImpl *>(this); }
 };
 
 /**
@@ -122,7 +106,7 @@ private:
  * chip applications should use this to access features of the PlatformManager object
  * that are common to all platforms.
  */
-inline PlatformManager & PlatformMgr()
+inline PlatformManager & PlatformMgr(void)
 {
     return PlatformManagerImpl::sInstance;
 }
@@ -133,7 +117,7 @@ inline PlatformManager & PlatformMgr()
  * chip applications can use this to gain access to features of the PlatformManager
  * that are specific to the ESP32 platform.
  */
-inline PlatformManagerImpl & PlatformMgrImpl()
+inline PlatformManagerImpl & PlatformMgrImpl(void)
 {
     return PlatformManagerImpl::sInstance;
 }

@@ -29,11 +29,11 @@
 #include <app/data-model/FabricScoped.h>
 #include <app/data-model/List.h>
 #include <lib/core/CHIPCore.h>
-#include <lib/core/CHIPTLVDebug.hpp>
+#include <lib/core/TLVDebug.h>
 #include <lib/support/CodeUtils.h>
 #include <lib/support/DLLUtil.h>
 #include <lib/support/logging/CHIPLogging.h>
-#include <messaging/ExchangeContext.h>
+#include <messaging/ExchangeHolder.h>
 #include <messaging/ExchangeMgr.h>
 #include <messaging/Flags.h>
 #include <protocols/Protocols.h>
@@ -125,14 +125,15 @@ public:
     WriteClient(Messaging::ExchangeManager * apExchangeMgr, Callback * apCallback, const Optional<uint16_t> & aTimedWriteTimeoutMs,
                 bool aSuppressResponse = false) :
         mpExchangeMgr(apExchangeMgr),
-        mpCallback(apCallback), mTimedWriteTimeoutMs(aTimedWriteTimeoutMs), mSuppressResponse(aSuppressResponse)
+        mExchangeCtx(*this), mpCallback(apCallback), mTimedWriteTimeoutMs(aTimedWriteTimeoutMs),
+        mSuppressResponse(aSuppressResponse)
     {}
 
-#if CONFIG_IM_BUILD_FOR_UNIT_TEST
+#if CONFIG_BUILD_FOR_HOST_UNIT_TEST
     WriteClient(Messaging::ExchangeManager * apExchangeMgr, Callback * apCallback, const Optional<uint16_t> & aTimedWriteTimeoutMs,
                 uint16_t aReservedSize) :
         mpExchangeMgr(apExchangeMgr),
-        mpCallback(apCallback), mTimedWriteTimeoutMs(aTimedWriteTimeoutMs), mReservedSize(aReservedSize)
+        mExchangeCtx(*this), mpCallback(apCallback), mTimedWriteTimeoutMs(aTimedWriteTimeoutMs), mReservedSize(aReservedSize)
     {}
 #endif
 
@@ -226,14 +227,6 @@ public:
      */
     void Shutdown();
 
-    /*
-     * Destructor - as part of destruction, it will abort the exchange context
-     * if a valid one still exists.
-     *
-     * See Abort() for details on when that might occur.
-     */
-    ~WriteClient() override { Abort(); }
-
 private:
     friend class TestWriteInteraction;
     friend class InteractionModelEngine;
@@ -267,8 +260,7 @@ private:
 
         ReturnErrorOnFailure(PrepareAttributeIB(attributePath));
         VerifyOrReturnError((writer = GetAttributeDataIBTLVWriter()) != nullptr, CHIP_ERROR_INCORRECT_STATE);
-        ReturnErrorOnFailure(
-            DataModel::Encode(*writer, chip::TLV::ContextTag(to_underlying(chip::app::AttributeDataIB::Tag::kData)), value));
+        ReturnErrorOnFailure(DataModel::Encode(*writer, chip::TLV::ContextTag(chip::app::AttributeDataIB::Tag::kData), value));
         ReturnErrorOnFailure(FinishAttributeIB());
 
         return CHIP_NO_ERROR;
@@ -281,8 +273,8 @@ private:
 
         ReturnErrorOnFailure(PrepareAttributeIB(attributePath));
         VerifyOrReturnError((writer = GetAttributeDataIBTLVWriter()) != nullptr, CHIP_ERROR_INCORRECT_STATE);
-        ReturnErrorOnFailure(DataModel::EncodeForWrite(
-            *writer, chip::TLV::ContextTag(to_underlying(chip::app::AttributeDataIB::Tag::kData)), value));
+        ReturnErrorOnFailure(
+            DataModel::EncodeForWrite(*writer, chip::TLV::ContextTag(chip::app::AttributeDataIB::Tag::kData), value));
         ReturnErrorOnFailure(FinishAttributeIB());
 
         return CHIP_NO_ERROR;
@@ -347,15 +339,6 @@ private:
      */
     void Abort();
 
-    // Handle a message received when we are expecting a status response to a
-    // Timed Request.  The caller is assumed to have already checked that our
-    // exchange context member is the one the message came in on.
-    //
-    // If the server returned an error status response its status will be
-    // encapsulated in the CHIP_ERROR this returns.  In that case,
-    // StatusIB::InitFromChipError can be used to extract the status.
-    CHIP_ERROR HandleTimedStatus(const PayloadHeader & aPayloadHeader, System::PacketBufferHandle && aPayload);
-
     // Send our queued-up Write Request message.  Assumes the exchange is ready
     // and mPendingWriteData is populated.
     CHIP_ERROR SendWriteRequest();
@@ -378,9 +361,9 @@ private:
     CHIP_ERROR FinalizeMessage(bool aHasMoreChunks);
 
     Messaging::ExchangeManager * mpExchangeMgr = nullptr;
-    Messaging::ExchangeContext * mpExchangeCtx = nullptr;
-    Callback * mpCallback                      = nullptr;
-    State mState                               = State::Initialized;
+    Messaging::ExchangeHolder mExchangeCtx;
+    Callback * mpCallback = nullptr;
+    State mState          = State::Initialized;
     System::PacketBufferTLVWriter mMessageWriter;
     WriteRequestMessage::Builder mWriteRequestBuilder;
     // TODO Maybe we should change PacketBufferTLVWriter so we can finalize it
@@ -398,7 +381,7 @@ private:
     // TODO: This file might be compiled with different build flags on Darwin platform (when building WriteClient.cpp and
     // CHIPClustersObjc.mm), which will cause undefined behavior when building write requests. Uncomment the #if and #endif after
     // resolving it.
-    // #if CONFIG_IM_BUILD_FOR_UNIT_TEST
+    // #if CONFIG_BUILD_FOR_HOST_UNIT_TEST
     uint16_t mReservedSize = 0;
     // #endif
 

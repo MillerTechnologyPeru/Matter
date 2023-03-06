@@ -28,22 +28,31 @@
 #include <app/AttributeAccessInterface.h>
 #include <app/AttributePathExpandIterator.h>
 #include <app/AttributePathParams.h>
+#include <app/CASESessionManager.h>
 #include <app/DataVersionFilter.h>
 #include <app/EventManagement.h>
 #include <app/EventPathParams.h>
 #include <app/MessageDef/AttributePathIBs.h>
+#include <app/MessageDef/DataVersionFilterIBs.h>
+#include <app/MessageDef/EventFilterIBs.h>
 #include <app/MessageDef/EventPathIBs.h>
 #include <app/ObjectList.h>
+#include <app/OperationalSessionSetup.h>
+#include <app/SubscriptionResumptionStorage.h>
+#include <lib/core/CHIPCallback.h>
 #include <lib/core/CHIPCore.h>
-#include <lib/core/CHIPTLVDebug.hpp>
+#include <lib/core/TLVDebug.h>
 #include <lib/support/CodeUtils.h>
 #include <lib/support/DLLUtil.h>
 #include <lib/support/logging/CHIPLogging.h>
-#include <messaging/ExchangeContext.h>
+#include <messaging/ExchangeHolder.h>
 #include <messaging/ExchangeMgr.h>
 #include <messaging/Flags.h>
 #include <protocols/Protocols.h>
 #include <system/SystemPacketBuffer.h>
+
+// https://github.com/CHIP-Specifications/connectedhomeip-spec/blob/61a9d19e6af12fdfb0872bcff26d19de6c680a1a/src/Ch02_Architecture.adoc#1122-subscribe-interaction-limits
+constexpr uint16_t kSubscriptionMaxIntervalPublisherLimit = 3600; // 3600 seconds
 
 namespace chip {
 namespace app {
@@ -160,6 +169,17 @@ public:
      */
     ReadHandler(ManagementCallback & apCallback, Messaging::ExchangeContext * apExchangeContext, InteractionType aInteractionType);
 
+#if CHIP_CONFIG_PERSIST_SUBSCRIPTIONS
+    /**
+     *
+     *  Constructor in preparation for resuming a persisted subscription
+     *
+     *  The callback passed in has to outlive this handler object.
+     *
+     */
+    ReadHandler(ManagementCallback & apCallback);
+#endif
+
     const ObjectList<AttributePathParams> * GetAttributePathList() const { return mpAttributePathList; }
     const ObjectList<EventPathParams> * GetEventPathList() const { return mpEventPathList; }
     const ObjectList<DataVersionFilter> * GetDataVersionFilterList() const { return mpDataVersionFilterList; }
@@ -167,20 +187,22 @@ public:
     void GetReportingIntervals(uint16_t & aMinInterval, uint16_t & aMaxInterval) const
     {
         aMinInterval = mMinIntervalFloorSeconds;
-        aMaxInterval = mMaxIntervalCeilingSeconds;
+        aMaxInterval = mMaxInterval;
     }
 
     /*
      * Set the reporting intervals for the subscription. This SHALL only be called
-     * from the OnSubscriptionRequested callback above.
+     * from the OnSubscriptionRequested callback above. The restriction is as below
+     * MinIntervalFloor ≤ MaxInterval ≤ MAX(SUBSCRIPTION_MAX_INTERVAL_PUBLISHER_LIMIT, MaxIntervalCeiling)
+     * Where SUBSCRIPTION_MAX_INTERVAL_PUBLISHER_LIMIT is set to 60m in the spec.
      */
-    CHIP_ERROR SetReportingIntervals(uint16_t aMinInterval, uint16_t aMaxInterval)
+    CHIP_ERROR SetReportingIntervals(uint16_t aMaxInterval)
     {
         VerifyOrReturnError(IsIdle(), CHIP_ERROR_INCORRECT_STATE);
-        VerifyOrReturnError(aMinInterval <= aMaxInterval, CHIP_ERROR_INVALID_ARGUMENT);
-
-        mMinIntervalFloorSeconds   = aMinInterval;
-        mMaxIntervalCeilingSeconds = aMaxInterval;
+        VerifyOrReturnError(mMinIntervalFloorSeconds <= aMaxInterval, CHIP_ERROR_INVALID_ARGUMENT);
+        VerifyOrReturnError(aMaxInterval <= std::max(kSubscriptionMaxIntervalPublisherLimit, mMaxInterval),
+                            CHIP_ERROR_INVALID_ARGUMENT);
+        mMaxInterval = aMaxInterval;
         return CHIP_NO_ERROR;
     }
 
@@ -191,9 +213,7 @@ private:
     enum class ReadHandlerFlags : uint8_t
     {
         // mHoldReport is used to prevent subscription data delivery while we are
-        // waiting for the min reporting interval to elapse.  If we have to send a
-        // report immediately due to an urgent event being queued,
-        // UnblockUrgentEventDelivery can be used to force mHoldReport to false.
+        // waiting for the min reporting interval to elapse.
         HoldReport = (1 << 0),
 
         // mHoldSync is used to prevent subscription empty report delivery while we
@@ -212,7 +232,6 @@ private:
         PrimingReports     = (1 << 3),
         ActiveSubscription = (1 << 4),
         FabricFiltered     = (1 << 5),
-
         // For subscriptions, we record the dirty set generation when we started to generate the last report.
         // The mCurrentReportsBeginGeneration records the generation at the start of the current report.  This only/
         // has a meaningful value while IsReporting() is true.
@@ -220,6 +239,8 @@ private:
         // mPreviousReportsBeginGeneration will be set to mCurrentReportsBeginGeneration after we send the last
         // chunk of the current report.  Anything that was dirty with a generation earlier than
         // mPreviousReportsBeginGeneration has had its value sent to the client.
+        // when receiving initial request, it needs mark current handler as dirty.
+        // when there is urgent event, it needs mark current handler as dirty.
         ForceDirty = (1 << 6),
 
         // Don't need the response for report data if true
@@ -235,7 +256,19 @@ private:
      *  @retval #CHIP_NO_ERROR On success.
      *
      */
-    CHIP_ERROR OnInitialRequest(System::PacketBufferHandle && aPayload);
+    void OnInitialRequest(System::PacketBufferHandle && aPayload);
+
+#if CHIP_CONFIG_PERSIST_SUBSCRIPTIONS
+    /**
+     *
+     *  @brief Resume a persisted subscription
+     *
+     *  Used after ReadHandler(ManagementCallback & apCallback). This will start a CASE session
+     *  with the subscriber if one doesn't already exist, and send full priming report when connected.
+     */
+    void ResumeSubscription(CASESessionManager & caseSessionManager,
+                            SubscriptionResumptionStorage::SubscriptionInfo & subscriptionInfo);
+#endif
 
     /**
      *  Send ReportData to initiator
@@ -246,6 +279,8 @@ private:
      *  @retval #Others If fails to send report data
      *  @retval #CHIP_NO_ERROR On success.
      *
+     *  If an error is returned, the ReadHandler guarantees that it is not in
+     *  a state where it's waiting for a response.
      */
     CHIP_ERROR SendReportData(System::PacketBufferHandle && aPayload, bool aMoreChunks);
 
@@ -257,6 +292,9 @@ private:
     bool IsIdle() const { return mState == HandlerState::Idle; }
     bool IsReportable() const
     {
+        // Important: Anything that changes the state IsReportable depends on in
+        // a way that causes IsReportable to become true must call ScheduleRun
+        // on the reporting engine.
         return mState == HandlerState::GeneratingReports && !mFlags.Has(ReadHandlerFlags::HoldReport) &&
             (IsDirty() || !mFlags.Has(ReadHandlerFlags::HoldSync));
     }
@@ -293,8 +331,7 @@ private:
     {
         return (mDirtyGeneration > mPreviousReportsBeginGeneration) || mFlags.Has(ReadHandlerFlags::ForceDirty);
     }
-    void ClearDirty() { mFlags.Clear(ReadHandlerFlags::ForceDirty); }
-
+    void ClearForceDirtyFlag() { ClearStateFlag(ReadHandlerFlags::ForceDirty); }
     NodeId GetInitiatorNodeId() const
     {
         auto session = GetSession();
@@ -310,13 +347,9 @@ private:
     Transport::SecureSession * GetSession() const;
     SubjectDescriptor GetSubjectDescriptor() const { return GetSession()->GetSubjectDescriptor(); }
 
-    auto GetSubscriptionStartGeneration() const { return mSubscriptionStartGeneration; }
+    auto GetTransactionStartGeneration() const { return mTransactionStartGeneration; }
 
-    void UnblockUrgentEventDelivery()
-    {
-        mFlags.Clear(ReadHandlerFlags::HoldReport);
-        mFlags.Set(ReadHandlerFlags::ForceDirty);
-    }
+    void UnblockUrgentEventDelivery();
 
     const AttributeValueEncoder::AttributeEncodeState & GetAttributeEncodeState() const { return mAttributeEncoderState; }
     void SetAttributeEncodeState(const AttributeValueEncoder::AttributeEncodeState & aState) { mAttributeEncoderState = aState; }
@@ -349,23 +382,19 @@ private:
         AwaitingDestruction,    ///< The object has completed its work and is awaiting destruction by the application.
     };
 
-    /*
-     * This forcibly closes the exchange context if a valid one is pointed to. Such a situation does
-     * not arise during normal message processing flows that all normally call Close() above.
-     *
-     * This will eventually call Close() to drive the process of eventually releasing this object (unless called from the
-     * destructor).
-     *
-     * This is only called by a very narrow set of external objects as needed.
-     */
-    void Abort(bool aCalledFromDestructor = false);
-
+    enum class CloseOptions
+    {
+        kDropPersistedSubscription,
+        kKeepPersistedSubscription
+    };
     /**
-     * Called internally to signal the completion of all work on this object, gracefully close the
-     * exchange and finally, signal to a registerd callback that it's
+     * Called internally to signal the completion of all work on this objecta and signal to a registered callback that it's
      * safe to release this object.
+     *
+     *  @param    options             This specifies whether to drop or keep the subscription
+     *
      */
-    void Close();
+    void Close(CloseOptions options = CloseOptions::kDropPersistedSubscription);
 
     static void OnUnblockHoldReportCallback(System::Layer * apSystemLayer, void * apAppState);
     static void OnRefreshSubscribeTimerSyncCallback(System::Layer * apSystemLayer, void * apAppState);
@@ -373,18 +402,28 @@ private:
     CHIP_ERROR SendSubscribeResponse();
     CHIP_ERROR ProcessSubscribeRequest(System::PacketBufferHandle && aPayload);
     CHIP_ERROR ProcessReadRequest(System::PacketBufferHandle && aPayload);
-    CHIP_ERROR ProcessAttributePathList(AttributePathIBs::Parser & aAttributePathListParser);
+    CHIP_ERROR ProcessAttributePaths(AttributePathIBs::Parser & aAttributePathListParser);
     CHIP_ERROR ProcessEventPaths(EventPathIBs::Parser & aEventPathsParser);
     CHIP_ERROR ProcessEventFilters(EventFilterIBs::Parser & aEventFiltersParser);
-    CHIP_ERROR OnStatusResponse(Messaging::ExchangeContext * apExchangeContext, System::PacketBufferHandle && aPayload);
+    CHIP_ERROR OnStatusResponse(Messaging::ExchangeContext * apExchangeContext, System::PacketBufferHandle && aPayload,
+                                bool & aSendStatusResponse);
     CHIP_ERROR OnMessageReceived(Messaging::ExchangeContext * apExchangeContext, const PayloadHeader & aPayloadHeader,
                                  System::PacketBufferHandle && aPayload) override;
     void OnResponseTimeout(Messaging::ExchangeContext * apExchangeContext) override;
-    CHIP_ERROR OnUnknownMsgType(Messaging::ExchangeContext * apExchangeContext, const PayloadHeader & aPayloadHeader,
-                                System::PacketBufferHandle && aPayload);
     void MoveToState(const HandlerState aTargetState);
 
     const char * GetStateStr() const;
+
+    void PersistSubscription();
+
+    // Helpers for managing our state flags properly.
+    void SetStateFlag(ReadHandlerFlags aFlag, bool aValue = true);
+    void ClearStateFlag(ReadHandlerFlags aFlag);
+
+    // Helpers for continuing the subscription resumption
+    static void HandleDeviceConnected(void * context, Messaging::ExchangeManager & exchangeMgr,
+                                      const SessionHandle & sessionHandle);
+    static void HandleDeviceConnectionFailure(void * context, const ScopedNodeId & peerId, CHIP_ERROR error);
 
     AttributePathExpandIterator mAttributePathExpandIterator = AttributePathExpandIterator(nullptr);
 
@@ -426,11 +465,11 @@ private:
 
     // When we don't have enough resources for a new subscription, the oldest subscription might be evicted by interaction model
     // engine, the "oldest" subscription is the subscription with the smallest generation.
-    uint64_t mSubscriptionStartGeneration = 0;
+    uint64_t mTransactionStartGeneration = 0;
 
-    SubscriptionId mSubscriptionId      = 0;
-    uint16_t mMinIntervalFloorSeconds   = 0;
-    uint16_t mMaxIntervalCeilingSeconds = 0;
+    SubscriptionId mSubscriptionId    = 0;
+    uint16_t mMinIntervalFloorSeconds = 0;
+    uint16_t mMaxInterval             = 0;
 
     EventNumber mEventMin = 0;
 
@@ -440,7 +479,12 @@ private:
     // TODO: We should shutdown the transaction when the session expires.
     SessionHolder mSessionHandle;
 
-    Messaging::ExchangeContext * mpExchangeCtx = nullptr;
+    Messaging::ExchangeHolder mExchangeCtx;
+#if CHIP_CONFIG_UNSAFE_SUBSCRIPTION_EXCHANGE_MANAGER_USE
+    // TODO: this should be replaced by a pointer to the InteractionModelEngine that created the ReadHandler
+    // once InteractionModelEngine is no longer a singleton (see issue 23625)
+    Messaging::ExchangeManager * mExchangeMgr = nullptr;
+#endif // CHIP_CONFIG_UNSAFE_SUBSCRIPTION_EXCHANGE_MANAGER_USE
 
     ObjectList<AttributePathParams> * mpAttributePathList   = nullptr;
     ObjectList<EventPathParams> * mpEventPathList           = nullptr;
@@ -459,6 +503,12 @@ private:
     PriorityLevel mCurrentPriority = PriorityLevel::Invalid;
     BitFlags<ReadHandlerFlags> mFlags;
     InteractionType mInteractionType = InteractionType::Read;
+
+#if CHIP_CONFIG_PERSIST_SUBSCRIPTIONS
+    // Callbacks to handle server-initiated session success/failure
+    chip::Callback::Callback<OnDeviceConnected> mOnConnectedCallback;
+    chip::Callback::Callback<OnDeviceConnectionFailure> mOnConnectionFailureCallback;
+#endif
 };
 } // namespace app
 } // namespace chip

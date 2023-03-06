@@ -15,9 +15,7 @@
  *    limitations under the License.
  */
 
-#include <app-common/zap-generated/af-structs.h>
 #include <app-common/zap-generated/att-storage.h>
-#include <app-common/zap-generated/attribute-type.h>
 #include <app-common/zap-generated/attributes/Accessors.h>
 #include <app-common/zap-generated/cluster-objects.h>
 #include <app-common/zap-generated/ids/Attributes.h>
@@ -29,10 +27,12 @@
 #include <app/clusters/on-off-server/on-off-server.h>
 #include <app/util/af.h>
 #include <app/util/attribute-storage.h>
+#include <app/util/config.h>
 #include <app/util/error-mapping.h>
 #include <app/util/odd-sized-integers.h>
 #include <app/util/util.h>
 #include <lib/support/CodeUtils.h>
+#include <platform/DiagnosticDataProvider.h>
 
 using namespace std;
 using namespace chip;
@@ -40,6 +40,9 @@ using namespace chip::app;
 using namespace chip::app::Clusters;
 using namespace chip::app::Clusters::ModeSelect;
 using namespace chip::Protocols;
+using chip::Protocols::InteractionModel::Status;
+
+using BootReasonType = GeneralDiagnostics::BootReasonEnum;
 
 static InteractionModel::Status verifyModeValue(const EndpointId endpointId, const uint8_t newMode);
 
@@ -97,18 +100,18 @@ bool emberAfModeSelectClusterChangeToModeCallback(CommandHandler * commandHandle
     uint8_t newMode       = commandData.newMode;
     // Check that the newMode matches one of the supported options
     const ModeSelect::Structs::ModeOptionStruct::Type * modeOptionPtr;
-    EmberAfStatus checkSupportedModeStatus =
+    Status checkSupportedModeStatus =
         ModeSelect::getSupportedModesManager()->getModeOptionByMode(endpointId, newMode, &modeOptionPtr);
-    if (EMBER_ZCL_STATUS_SUCCESS != checkSupportedModeStatus)
+    if (Status::Success != checkSupportedModeStatus)
     {
         emberAfPrintln(EMBER_AF_PRINT_DEBUG, "ModeSelect: Failed to find the option with mode %u", newMode);
-        emberAfSendImmediateDefaultResponse(checkSupportedModeStatus);
-        return false;
+        commandHandler->AddStatus(commandPath, checkSupportedModeStatus);
+        return true;
     }
     ModeSelect::Attributes::CurrentMode::Set(endpointId, newMode);
 
     emberAfPrintln(EMBER_AF_PRINT_DEBUG, "ModeSelect: ChangeToMode successful");
-    emberAfSendImmediateDefaultResponse(EMBER_ZCL_STATUS_SUCCESS);
+    commandHandler->AddStatus(commandPath, Status::Success);
     return true;
 }
 
@@ -132,9 +135,6 @@ void emberAfModeSelectClusterServerInitCallback(EndpointId endpointId)
         EmberAfStatus status = Attributes::StartUpMode::Get(endpointId, startUpMode);
         if (status == EMBER_ZCL_STATUS_SUCCESS && !startUpMode.IsNull())
         {
-            // Initialise currentMode to 0
-            uint8_t currentMode = 0;
-            status              = Attributes::CurrentMode::Get(endpointId, &currentMode);
 #ifdef EMBER_AF_PLUGIN_ON_OFF
             // OnMode with Power Up
             // If the On/Off feature is supported and the On/Off cluster attribute StartUpOnOff is present, with a
@@ -145,9 +145,9 @@ void emberAfModeSelectClusterServerInitCallback(EndpointId endpointId)
                 emberAfContainsAttribute(endpointId, ModeSelect::Id, ModeSelect::Attributes::OnMode::Id))
             {
                 Attributes::OnMode::TypeInfo::Type onMode;
-                bool onOffValueForStartUp = 0;
+                bool onOffValueForStartUp = false;
                 if (Attributes::OnMode::Get(endpointId, onMode) == EMBER_ZCL_STATUS_SUCCESS &&
-                    emberAfIsNonVolatileAttribute(endpointId, OnOff::Id, OnOff::Attributes::StartUpOnOff::Id) &&
+                    !emberAfIsKnownVolatileAttribute(endpointId, OnOff::Id, OnOff::Attributes::StartUpOnOff::Id) &&
                     OnOffServer::Instance().getOnOffValueForStartUp(endpointId, onOffValueForStartUp) == EMBER_ZCL_STATUS_SUCCESS)
                 {
                     if (onOffValueForStartUp && !onMode.IsNull())
@@ -158,7 +158,27 @@ void emberAfModeSelectClusterServerInitCallback(EndpointId endpointId)
                 }
             }
 #endif // EMBER_AF_PLUGIN_ON_OFF
-            if (status == EMBER_ZCL_STATUS_SUCCESS && startUpMode.Value() != currentMode)
+
+            BootReasonType bootReason = BootReasonType::kUnspecified;
+            CHIP_ERROR error          = DeviceLayer::GetDiagnosticDataProvider().GetBootReason(bootReason);
+
+            if (error != CHIP_NO_ERROR)
+            {
+                ChipLogError(Zcl, "Unable to retrieve boot reason: %" CHIP_ERROR_FORMAT, error.Format());
+                // We really only care whether the boot reason is OTA.  Assume it's not.
+                bootReason = BootReasonType::kUnspecified;
+            }
+            if (bootReason == BootReasonType::kSoftwareUpdateCompleted)
+            {
+                ChipLogDetail(Zcl, "ModeSelect: CurrentMode is ignored for OTA reboot");
+                return;
+            }
+
+            // Initialise currentMode to 0
+            uint8_t currentMode = 0;
+            status              = Attributes::CurrentMode::Get(endpointId, &currentMode);
+
+            if ((status == EMBER_ZCL_STATUS_SUCCESS) && (startUpMode.Value() != currentMode))
             {
                 status = Attributes::CurrentMode::Set(endpointId, startUpMode.Value());
                 if (status != EMBER_ZCL_STATUS_SUCCESS)
@@ -189,13 +209,13 @@ namespace {
  */
 inline bool areStartUpModeAndCurrentModeNonVolatile(EndpointId endpointId)
 {
-    return emberAfIsNonVolatileAttribute(endpointId, ModeSelect::Id, Attributes::CurrentMode::Id) &&
-        emberAfIsNonVolatileAttribute(endpointId, ModeSelect::Id, Attributes::StartUpMode::Id);
+    return !emberAfIsKnownVolatileAttribute(endpointId, ModeSelect::Id, Attributes::CurrentMode::Id) &&
+        !emberAfIsKnownVolatileAttribute(endpointId, ModeSelect::Id, Attributes::StartUpMode::Id);
 }
 
 } // namespace
 
-void MatterModeSelectPluginServerInitCallback(void)
+void MatterModeSelectPluginServerInitCallback()
 {
     registerAttributeAccessOverride(&gModeSelectAttrAccess);
 }
@@ -243,12 +263,5 @@ static InteractionModel::Status verifyModeValue(const EndpointId endpointId, con
         return InteractionModel::Status::Success;
     }
     const ModeSelect::Structs::ModeOptionStruct::Type * modeOptionPtr;
-    EmberAfStatus checkSupportedModeStatus =
-        ModeSelect::getSupportedModesManager()->getModeOptionByMode(endpointId, newMode, &modeOptionPtr);
-    if (EMBER_ZCL_STATUS_SUCCESS != checkSupportedModeStatus)
-    {
-        const InteractionModel::Status returnStatus = ToInteractionModelStatus(checkSupportedModeStatus);
-        return returnStatus;
-    }
-    return InteractionModel::Status::Success;
+    return ModeSelect::getSupportedModesManager()->getModeOptionByMode(endpointId, newMode, &modeOptionPtr);
 }

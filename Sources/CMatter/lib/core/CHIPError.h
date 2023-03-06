@@ -1,4 +1,4 @@
- /*
+/*
  *
  *    Copyright (c) 2020-2022 Project CHIP Authors
  *    Copyright (c) 2013-2017 Nest Labs, Inc.
@@ -401,7 +401,8 @@ using CHIP_ERROR = ::chip::ChipError;
 #define CHIP_CORE_ERROR(e) CHIP_SDK_ERROR(::chip::ChipError::SdkPart::kCore, (e))
 
 #define CHIP_IM_GLOBAL_STATUS(type)                                                                                                \
-    CHIP_SDK_ERROR(::chip::ChipError::SdkPart::kIMGlobalStatus, to_underlying(Protocols::InteractionModel::Status::type))
+    CHIP_SDK_ERROR(::chip::ChipError::SdkPart::kIMGlobalStatus,                                                                    \
+                   ::chip::to_underlying(::chip::Protocols::InteractionModel::Status::type))
 
 //
 // type must be a compile-time constant as mandated by CHIP_SDK_ERROR.
@@ -1394,13 +1395,13 @@ using CHIP_ERROR = ::chip::ChipError;
 #define CHIP_ERROR_LISTENER_ALREADY_STOPPED                    CHIP_CORE_ERROR(0x6a)
 
 /**
- *  @def CHIP_ERROR_UNKNOWN_TOPIC
+ *  @def CHIP_ERROR_INVALID_SUBSCRIPTION
  *
  *  @brief
- *    A topic ID was unknown to the recipient.
+ *    A message was received as part of a subscription exchange that has a mis-matching subscription id.
  *
  */
-#define CHIP_ERROR_UNKNOWN_TOPIC                               CHIP_CORE_ERROR(0x6b)
+#define CHIP_ERROR_INVALID_SUBSCRIPTION                               CHIP_CORE_ERROR(0x6b)
 
 /**
  *  @def CHIP_ERROR_UNSUPPORTED_CHIP_FEATURE
@@ -1554,7 +1555,13 @@ using CHIP_ERROR = ::chip::ChipError;
  */
 #define CHIP_ERROR_IM_MALFORMED_STATUS_RESPONSE_MESSAGE      CHIP_CORE_ERROR(0x7c)
 
-// unused CHIP_CORE_ERROR(0x7d)
+/**
+ * @def CHIP_ERROR_MESSAGE_COUNTER_EXHAUSTED
+ *
+ * @brief
+ *   The message counter of the session is exhausted, the session should be closed.
+ */
+#define CHIP_ERROR_MESSAGE_COUNTER_EXHAUSTED                 CHIP_CORE_ERROR(0x7d)
 
 /**
  *  @def CHIP_ERROR_FABRIC_EXISTS
@@ -1872,13 +1879,12 @@ using CHIP_ERROR = ::chip::ChipError;
 #define CHIP_ERROR_PERSISTED_STORAGE_VALUE_NOT_FOUND           CHIP_CORE_ERROR(0xa0)
 
 /**
- *  @def CHIP_ERROR_PROFILE_STRING_CONTEXT_ALREADY_REGISTERED
+ * @def CHIP_ERROR_IM_FABRIC_DELETED
  *
- *  @brief
- *    The specified profile string support context is already registered.
- *
+ * @brief
+ *   The fabric is deleted, and the corresponding IM resources are released
  */
-#define CHIP_ERROR_PROFILE_STRING_CONTEXT_ALREADY_REGISTERED   CHIP_CORE_ERROR(0xa1)
+#define CHIP_ERROR_IM_FABRIC_DELETED                            CHIP_CORE_ERROR(0xa1)
 
 /**
  *  @def CHIP_ERROR_PROFILE_STRING_CONTEXT_NOT_REGISTERED
@@ -2420,6 +2426,14 @@ using CHIP_ERROR = ::chip::ChipError;
  *   The URI separator is missing
  */
 #define CHIP_ERROR_MISSING_URI_SEPARATOR                      CHIP_CORE_ERROR(0xe0)
+
+/**
+ * @def CHIP_ERROR_HANDLER_NOT_SET
+ *
+ * @brief
+ *   Callback function or callable object is not set
+ */
+#define CHIP_ERROR_HANDLER_NOT_SET                            CHIP_CORE_ERROR(0xe1)
 
 // clang-format on
 

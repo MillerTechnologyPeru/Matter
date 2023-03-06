@@ -2,7 +2,7 @@
 import PackageDescription
 
 // Sources copied from CHIP
-// SHA 3fafeceff1681d01244c602584da47bd6f3bfd90
+// SHA 32fb896f3075418f1dc6d920a90376a1aa3cf239
 // https://github.com/project-chip/connectedhomeip
 
 let package = Package(

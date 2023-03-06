@@ -36,6 +36,11 @@
 #include <transport/raw/MessageHeader.h>
 
 namespace chip {
+namespace app {
+class TestCommandInteraction;
+class TestReadInteraction;
+class TestWriteInteraction;
+} // namespace app
 namespace Messaging {
 
 class ChipMessageInfo;
@@ -121,6 +126,9 @@ public:
     /// Determine whether this exchange is requesting Sleepy End Device active mode
     bool IsRequestingActiveMode() const;
 
+    /// Determine whether this exchange is a EphemeralExchange for replying a StandaloneAck
+    bool IsEphemeralExchange() const;
+
     /**
      * Get the reliable message manager that corresponds to this reliable
      * message context.
@@ -158,6 +166,12 @@ protected:
 
         /// When set, signifies that the exchange is requesting Sleepy End Device active mode.
         kFlagActiveMode = (1u << 8),
+
+        /// When set, signifies that the exchange created sorely for replying a StandaloneAck
+        kFlagEphemeralExchange = (1u << 9),
+
+        /// When set, ignore session being released, because we are releasing it ourselves.
+        kFlagIgnoreSessionRelease = (1u << 10),
     };
 
     BitFlags<Flags> mFlags; // Internal state flags
@@ -184,6 +198,9 @@ private:
     friend class ReliableMessageMgr;
     friend class ExchangeContext;
     friend class ExchangeMessageDispatch;
+    friend class ::chip::app::TestCommandInteraction;
+    friend class ::chip::app::TestReadInteraction;
+    friend class ::chip::app::TestWriteInteraction;
 
     System::Clock::Timestamp mNextAckTime; // Next time for triggering Solo Ack
     uint32_t mPendingPeerAckMessageCounter;
@@ -232,6 +249,11 @@ inline void ReliableMessageContext::SetMessageNotAcked(bool messageNotAcked)
 inline void ReliableMessageContext::SetRequestingActiveMode(bool activeMode)
 {
     mFlags.Set(Flags::kFlagActiveMode, activeMode);
+}
+
+inline bool ReliableMessageContext::IsEphemeralExchange() const
+{
+    return mFlags.Has(Flags::kFlagEphemeralExchange);
 }
 
 } // namespace Messaging

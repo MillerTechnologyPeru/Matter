@@ -30,11 +30,13 @@
 #include <app/ConcreteCommandPath.h>
 #include <app/data-model/Encode.h>
 #include <app/util/attribute-storage.h>
+#include <app/util/config.h>
 #include <platform/CHIPDeviceConfig.h>
 
 using namespace chip;
 using namespace chip::app::Clusters;
 using namespace chip::app::Clusters::MediaInput;
+using Protocols::InteractionModel::Status;
 
 static constexpr size_t kMediaInputDelegateTableSize =
     EMBER_AF_MEDIA_INPUT_CLUSTER_SERVER_ENDPOINT_COUNT + CHIP_DEVICE_CONFIG_DYNAMIC_ENDPOINT_COUNT;
@@ -172,22 +174,25 @@ bool emberAfMediaInputClusterSelectInputCallback(app::CommandHandler * command, 
 {
     CHIP_ERROR err      = CHIP_NO_ERROR;
     EndpointId endpoint = commandPath.mEndpointId;
+    Status status       = Status::Success;
 
     auto & input = commandData.index;
 
     Delegate * delegate = GetDelegate(endpoint);
     VerifyOrExit(isDelegateNull(delegate, endpoint) != true, err = CHIP_ERROR_INCORRECT_STATE);
 
+    if (!delegate->HandleSelectInput(input))
+    {
+        status = Status::Failure;
+    }
 exit:
     if (err != CHIP_NO_ERROR)
     {
         ChipLogError(Zcl, "emberAfMediaInputClusterSelectInputCallback error: %s", err.AsString());
-        emberAfSendImmediateDefaultResponse(EMBER_ZCL_STATUS_FAILURE);
+        status = Status::Failure;
     }
 
-    bool success         = delegate->HandleSelectInput(input);
-    EmberAfStatus status = success ? EMBER_ZCL_STATUS_SUCCESS : EMBER_ZCL_STATUS_FAILURE;
-    emberAfSendImmediateDefaultResponse(status);
+    command->AddStatus(commandPath, status);
     return true;
 }
 
@@ -196,20 +201,24 @@ bool emberAfMediaInputClusterShowInputStatusCallback(app::CommandHandler * comma
 {
     CHIP_ERROR err      = CHIP_NO_ERROR;
     EndpointId endpoint = commandPath.mEndpointId;
+    Status status       = Status::Success;
 
     Delegate * delegate = GetDelegate(endpoint);
     VerifyOrExit(isDelegateNull(delegate, endpoint) != true, err = CHIP_ERROR_INCORRECT_STATE);
+
+    if (!delegate->HandleShowInputStatus())
+    {
+        status = Status::Failure;
+    }
 
 exit:
     if (err != CHIP_NO_ERROR)
     {
         ChipLogError(Zcl, "emberAfMediaInputClusterShowInputStatusCallback error: %s", err.AsString());
-        emberAfSendImmediateDefaultResponse(EMBER_ZCL_STATUS_FAILURE);
+        status = Status::Failure;
     }
 
-    bool success         = delegate->HandleShowInputStatus();
-    EmberAfStatus status = success ? EMBER_ZCL_STATUS_SUCCESS : EMBER_ZCL_STATUS_FAILURE;
-    emberAfSendImmediateDefaultResponse(status);
+    command->AddStatus(commandPath, status);
     return true;
 }
 
@@ -218,20 +227,24 @@ bool emberAfMediaInputClusterHideInputStatusCallback(app::CommandHandler * comma
 {
     CHIP_ERROR err      = CHIP_NO_ERROR;
     EndpointId endpoint = commandPath.mEndpointId;
+    Status status       = Status::Success;
 
     Delegate * delegate = GetDelegate(endpoint);
     VerifyOrExit(isDelegateNull(delegate, endpoint) != true, err = CHIP_ERROR_INCORRECT_STATE);
+
+    if (!delegate->HandleHideInputStatus())
+    {
+        status = Status::Failure;
+    }
 
 exit:
     if (err != CHIP_NO_ERROR)
     {
         ChipLogError(Zcl, "emberAfMediaInputClusterHideInputStatusCallback error: %s", err.AsString());
-        emberAfSendImmediateDefaultResponse(EMBER_ZCL_STATUS_FAILURE);
+        status = Status::Failure;
     }
 
-    bool success         = delegate->HandleHideInputStatus();
-    EmberAfStatus status = success ? EMBER_ZCL_STATUS_SUCCESS : EMBER_ZCL_STATUS_FAILURE;
-    emberAfSendImmediateDefaultResponse(status);
+    command->AddStatus(commandPath, status);
     return true;
 }
 
@@ -245,19 +258,30 @@ bool emberAfMediaInputClusterRenameInputCallback(app::CommandHandler * command, 
 
     Delegate * delegate = GetDelegate(endpoint);
     VerifyOrExit(isDelegateNull(delegate, endpoint) != true, err = CHIP_ERROR_INCORRECT_STATE);
-
-exit:
-    if (HasFeature(endpoint, MediaInputFeature::kNameUpdates) && err == CHIP_NO_ERROR)
+    if (!HasFeature(endpoint, MediaInputFeature::kNameUpdates))
     {
-        bool success = delegate->HandleRenameInput(index, name);
-        Protocols::InteractionModel::Status status =
-            success ? Protocols::InteractionModel::Status::Success : Protocols::InteractionModel::Status::Failure;
-        command->AddStatus(commandPath, status);
+        ChipLogError(Zcl, "MediaInput no name updates feature");
+        err = CHIP_ERROR_INCORRECT_STATE;
+        ExitNow();
+    }
+
+    Protocols::InteractionModel::Status status;
+
+    if (delegate->HandleRenameInput(index, name))
+    {
+        status = Protocols::InteractionModel::Status::Success;
     }
     else
     {
-        err != CHIP_NO_ERROR ? ChipLogError(Zcl, "emberAfMediaInputClusterRenameInputCallback error: %s", err.AsString())
-                             : ChipLogError(Zcl, "MediaInput no name updates feature");
+        status = Protocols::InteractionModel::Status::Failure;
+    }
+    command->AddStatus(commandPath, status);
+
+exit:
+
+    if (err != CHIP_NO_ERROR)
+    {
+        ChipLogError(Zcl, "emberAfMediaInputClusterRenameInputCallback error: %" CHIP_ERROR_FORMAT, err.Format());
         command->AddStatus(commandPath, Protocols::InteractionModel::Status::Failure);
     }
 

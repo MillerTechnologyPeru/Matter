@@ -30,6 +30,7 @@ using namespace chip;
 bool emberAfIdentifyClusterIdentifyQueryResponseCallback(app::CommandHandler * commandObj, uint16_t timeout)
 {
     emberAfIdentifyClusterPrintln("RX: IdentifyQueryResponse 0x%4x", timeout);
-    emberAfSendImmediateDefaultResponse(EMBER_ZCL_STATUS_SUCCESS);
+    // FIXME: Use of undeclared identifier 'commandPath'
+    //commandObj->AddStatus(commandPath, Status::Success);
     return true;
 }

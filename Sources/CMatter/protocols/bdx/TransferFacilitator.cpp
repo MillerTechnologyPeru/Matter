@@ -46,7 +46,7 @@ CHIP_ERROR TransferFacilitator::OnMessageReceived(chip::Messaging::ExchangeConte
         mTransfer.HandleMessageReceived(payloadHeader, std::move(payload), System::SystemClock().GetMonotonicTimestamp());
     if (err != CHIP_NO_ERROR)
     {
-        ChipLogError(BDX, "failed to handle message: %s", ErrorStr(err));
+        ChipLogError(BDX, "failed to handle message: %" CHIP_ERROR_FORMAT, err.Format());
     }
 
     // Almost every BDX message will follow up with a response on the exchange. Even messages that might signify the end of a
@@ -78,7 +78,15 @@ void TransferFacilitator::PollForOutput()
     HandleTransferSessionOutput(outEvent);
 
     VerifyOrReturn(mSystemLayer != nullptr, ChipLogError(BDX, "%s mSystemLayer is null", __FUNCTION__));
-    mSystemLayer->StartTimer(mPollFreq, PollTimerHandler, this);
+    if (!mStopPolling)
+    {
+        mSystemLayer->StartTimer(mPollFreq, PollTimerHandler, this);
+    }
+    else
+    {
+        mSystemLayer->CancelTimer(PollTimerHandler, this);
+        mStopPolling = false;
+    }
 }
 
 void TransferFacilitator::ScheduleImmediatePoll()
@@ -97,8 +105,17 @@ CHIP_ERROR Responder::PrepareForTransfer(System::Layer * layer, TransferRole rol
 
     ReturnErrorOnFailure(mTransfer.WaitForTransfer(role, xferControlOpts, maxBlockSize, timeout));
 
+    ChipLogProgress(BDX, "Start polling for messages");
+    mStopPolling = false;
     mSystemLayer->StartTimer(mPollFreq, PollTimerHandler, this);
     return CHIP_NO_ERROR;
+}
+
+void Responder::ResetTransfer()
+{
+    mTransfer.Reset();
+    ChipLogProgress(BDX, "Stop polling for messages");
+    mStopPolling = true;
 }
 
 CHIP_ERROR Initiator::InitiateTransfer(System::Layer * layer, TransferRole role, const TransferSession::TransferInitData & initData,

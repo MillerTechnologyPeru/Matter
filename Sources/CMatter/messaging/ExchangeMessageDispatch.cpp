@@ -46,7 +46,7 @@ CHIP_ERROR ExchangeMessageDispatch::SendMessage(SessionManager * sessionManager,
                                                 bool isReliableTransmission, Protocols::Id protocol, uint8_t type,
                                                 System::PacketBufferHandle && message)
 {
-    ReturnErrorCodeIf(!MessagePermitted(protocol.GetProtocolId(), type), CHIP_ERROR_INVALID_ARGUMENT);
+    ReturnErrorCodeIf(!MessagePermitted(protocol, type), CHIP_ERROR_INVALID_ARGUMENT);
 
     PayloadHeader payloadHeader;
     payloadHeader.SetExchangeID(exchangeId).SetMessageType(protocol, type).SetInitiator(isInitiator);
@@ -55,16 +55,6 @@ CHIP_ERROR ExchangeMessageDispatch::SendMessage(SessionManager * sessionManager,
     if (reliableMessageContext->HasPiggybackAckPending())
     {
         payloadHeader.SetAckMessageCounter(reliableMessageContext->TakePendingPeerAckMessageCounter());
-
-#if !defined(NDEBUG)
-        if (!payloadHeader.HasMessageType(Protocols::SecureChannel::MsgType::StandaloneAck))
-        {
-            ChipLogDetail(ExchangeManager,
-                          "Piggybacking Ack for MessageCounter:" ChipLogFormatMessageCounter
-                          " on exchange: " ChipLogFormatExchangeId,
-                          payloadHeader.GetAckMessageCounter().Value(), ChipLogValueExchangeId(exchangeId, isInitiator));
-        }
-#endif
     }
 
     if (IsReliableTransmissionAllowed() && reliableMessageContext->AutoRequestAck() &&
@@ -85,19 +75,7 @@ CHIP_ERROR ExchangeMessageDispatch::SendMessage(SessionManager * sessionManager,
 
         ReturnErrorOnFailure(sessionManager->PrepareMessage(session, payloadHeader, std::move(message), entryOwner->retainedBuf));
         CHIP_ERROR err = sessionManager->SendPreparedMessage(session, entryOwner->retainedBuf);
-        if (err == CHIP_ERROR_POSIX(ENOBUFS))
-        {
-            // sendmsg on BSD-based systems never blocks, no matter how the
-            // socket is configured, and will return ENOBUFS in situation in
-            // which Linux, for example, blocks.
-            //
-            // This is typically a transient situation, so we pretend like this
-            // packet drop happened somewhere on the network instead of inside
-            // sendmsg and will just resend it in the normal MRP way later.
-            ChipLogError(ExchangeManager, "Ignoring ENOBUFS: %" CHIP_ERROR_FORMAT " on exchange " ChipLogFormatExchangeId,
-                         err.Format(), ChipLogValueExchangeId(exchangeId, isInitiator));
-            err = CHIP_NO_ERROR;
-        }
+        err            = ReliableMessageMgr::MapSendError(err, exchangeId, isInitiator);
         ReturnErrorOnFailure(err);
         reliableMessageMgr->StartRetransmision(entryOwner.release());
     }
@@ -108,31 +86,6 @@ CHIP_ERROR ExchangeMessageDispatch::SendMessage(SessionManager * sessionManager,
         EncryptedPacketBufferHandle preparedMessage;
         ReturnErrorOnFailure(sessionManager->PrepareMessage(session, payloadHeader, std::move(message), preparedMessage));
         ReturnErrorOnFailure(sessionManager->SendPreparedMessage(session, preparedMessage));
-    }
-
-    return CHIP_NO_ERROR;
-}
-
-CHIP_ERROR ExchangeMessageDispatch::OnMessageReceived(uint32_t messageCounter, const PayloadHeader & payloadHeader,
-                                                      MessageFlags msgFlags, ReliableMessageContext * reliableMessageContext)
-{
-    ReturnErrorCodeIf(!MessagePermitted(payloadHeader.GetProtocolID().GetProtocolId(), payloadHeader.GetMessageType()),
-                      CHIP_ERROR_INVALID_ARGUMENT);
-
-    if (IsReliableTransmissionAllowed() && !reliableMessageContext->GetExchangeContext()->IsGroupExchangeContext())
-    {
-        if (!msgFlags.Has(MessageFlagValues::kDuplicateMessage) && payloadHeader.IsAckMsg() &&
-            payloadHeader.GetAckMessageCounter().HasValue())
-        {
-            reliableMessageContext->HandleRcvdAck(payloadHeader.GetAckMessageCounter().Value());
-        }
-
-        if (payloadHeader.NeedsAck())
-        {
-            // An acknowledgment needs to be sent back to the peer for this message on this exchange,
-
-            ReturnErrorOnFailure(reliableMessageContext->HandleNeedsAck(messageCounter, msgFlags));
-        }
     }
 
     return CHIP_NO_ERROR;

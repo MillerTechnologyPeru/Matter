@@ -22,6 +22,33 @@
 
 namespace chip {
 
+#if CHIP_SYSTEM_CONFIG_POOL_USE_HEAP
+
+bool HeapObjectPoolExitHandling::sIgnoringLeaksOnExit   = false;
+bool HeapObjectPoolExitHandling::sExitHandlerRegistered = false;
+
+void HeapObjectPoolExitHandling::IgnoreLeaksOnExit()
+{
+    if (sExitHandlerRegistered)
+    {
+        return;
+    }
+
+    int ret = atexit(ExitHandler);
+    if (ret != 0)
+    {
+        ChipLogError(Controller, "IgnoreLeaksOnExit: atexit failed: %d\n", ret);
+    }
+    sExitHandlerRegistered = true;
+}
+
+void HeapObjectPoolExitHandling::ExitHandler()
+{
+    sIgnoringLeaksOnExit = true;
+}
+
+#endif // CHIP_SYSTEM_CONFIG_POOL_USE_HEAP
+
 namespace internal {
 
 StaticAllocatorBitmap::StaticAllocatorBitmap(void * storage, std::atomic<tBitChunkType> * usage, size_t capacity,
@@ -118,7 +145,6 @@ Loop HeapObjectList::ForEachNode(void * context, Lambda lambda)
 {
     ++mIterationDepth;
     Loop result            = Loop::Finish;
-    bool anyReleased       = false;
     HeapObjectListNode * p = mNext;
     while (p != this)
     {
@@ -130,14 +156,10 @@ Loop HeapObjectList::ForEachNode(void * context, Lambda lambda)
                 break;
             }
         }
-        if (p->mObject == nullptr)
-        {
-            anyReleased = true;
-        }
         p = p->mNext;
     }
     --mIterationDepth;
-    if (mIterationDepth == 0 && anyReleased)
+    if (mIterationDepth == 0 && mHaveDeferredNodeRemovals)
     {
         // Remove nodes for released objects.
         p = mNext;
@@ -151,6 +173,8 @@ Loop HeapObjectList::ForEachNode(void * context, Lambda lambda)
             }
             p = next;
         }
+
+        mHaveDeferredNodeRemovals = false;
     }
     return result;
 }

@@ -23,8 +23,9 @@
  *
  */
 
-#include <app/AppBuildConfig.h>
+#include <app/AppConfig.h>
 #include <app/InteractionModelEngine.h>
+#include <app/RequiredPrivilege.h>
 #include <app/reporting/Engine.h>
 #include <app/util/MatterCallbacks.h>
 
@@ -121,7 +122,7 @@ CHIP_ERROR Engine::BuildSingleReportDataAttributeReportIBs(ReportDataMessage::Bu
             apReadHandler->ResetPathIterator();
         }
 
-#if CONFIG_IM_BUILD_FOR_UNIT_TEST
+#if CONFIG_BUILD_FOR_HOST_UNIT_TEST
         uint32_t attributesRead = 0;
 #endif
 
@@ -161,7 +162,7 @@ CHIP_ERROR Engine::BuildSingleReportDataAttributeReportIBs(ReportDataMessage::Bu
                 }
             }
 
-#if CONFIG_IM_BUILD_FOR_UNIT_TEST
+#if CONFIG_BUILD_FOR_HOST_UNIT_TEST
             attributesRead++;
             if (attributesRead > mMaxAttributesPerChunk)
             {
@@ -290,21 +291,62 @@ exit:
     return err;
 }
 
+CHIP_ERROR Engine::CheckAccessDeniedEventPaths(TLV::TLVWriter & aWriter, bool & aHasEncodedData, ReadHandler * apReadHandler)
+{
+    CHIP_ERROR err = CHIP_NO_ERROR;
+    for (auto current = apReadHandler->mpEventPathList; current != nullptr;)
+    {
+        if (current->mValue.HasEventWildcard())
+        {
+            current = current->mpNext;
+            continue;
+        }
+
+        Access::RequestPath requestPath{ .cluster = current->mValue.mClusterId, .endpoint = current->mValue.mEndpointId };
+        ConcreteEventPath path(current->mValue.mEndpointId, current->mValue.mClusterId, current->mValue.mEventId);
+        Access::Privilege requestPrivilege = RequiredPrivilege::ForReadEvent(path);
+
+        err = Access::GetAccessControl().Check(apReadHandler->GetSubjectDescriptor(), requestPath, requestPrivilege);
+        if (err != CHIP_ERROR_ACCESS_DENIED)
+        {
+            ReturnErrorOnFailure(err);
+        }
+        else
+        {
+            TLV::TLVWriter checkpoint = aWriter;
+            err                       = EventReportIB::ConstructEventStatusIB(aWriter, path,
+                                                        StatusIB(Protocols::InteractionModel::Status::UnsupportedAccess));
+            if (err != CHIP_NO_ERROR)
+            {
+                aWriter = checkpoint;
+                break;
+            }
+            aHasEncodedData = true;
+            ChipLogDetail(InteractionModel, "Acces to event (%u, " ChipLogFormatMEI ", " ChipLogFormatMEI ") denied by ACL",
+                          current->mValue.mEndpointId, ChipLogValueMEI(current->mValue.mClusterId),
+                          ChipLogValueMEI(current->mValue.mEventId));
+        }
+        current = current->mpNext;
+    }
+
+    return err;
+}
+
 CHIP_ERROR Engine::BuildSingleReportDataEventReports(ReportDataMessage::Builder & aReportDataBuilder, ReadHandler * apReadHandler,
                                                      bool aBufferIsUsed, bool * apHasMoreChunks, bool * apHasEncodedData)
 {
-    CHIP_ERROR err    = CHIP_NO_ERROR;
-    size_t eventCount = 0;
+    CHIP_ERROR err        = CHIP_NO_ERROR;
+    size_t eventCount     = 0;
+    bool hasEncodedStatus = false;
     TLV::TLVWriter backup;
     bool eventClean                = true;
-    const auto * eventList         = apReadHandler->GetEventPathList();
     auto & eventMin                = apReadHandler->GetEventMin();
     EventManagement & eventManager = EventManagement::GetInstance();
     bool hasMoreChunks             = false;
 
     aReportDataBuilder.Checkpoint(backup);
 
-    VerifyOrExit(eventList != nullptr, );
+    VerifyOrExit(apReadHandler->GetEventPathList() != nullptr, );
 
     // If the eventManager is not valid or has not been initialized,
     // skip the rest of processing
@@ -326,7 +368,11 @@ CHIP_ERROR Engine::BuildSingleReportDataEventReports(ReportDataMessage::Builder 
         SuccessOrExit(err = aReportDataBuilder.GetError());
         VerifyOrExit(eventReportIBs.GetWriter() != nullptr, err = CHIP_ERROR_INCORRECT_STATE);
         SuccessOrExit(err = eventReportIBs.GetWriter()->ReserveBuffer(kReservedSizeEndOfReportIBs));
-        err = eventManager.FetchEventsSince(*(eventReportIBs.GetWriter()), eventList, eventMin, eventCount,
+
+        err = CheckAccessDeniedEventPaths(*(eventReportIBs.GetWriter()), hasEncodedStatus, apReadHandler);
+        SuccessOrExit(err);
+
+        err = eventManager.FetchEventsSince(*(eventReportIBs.GetWriter()), apReadHandler->GetEventPathList(), eventMin, eventCount,
                                             apReadHandler->GetSubjectDescriptor());
 
         if ((err == CHIP_END_OF_TLV) || (err == CHIP_ERROR_TLV_UNDERRUN) || (err == CHIP_NO_ERROR))
@@ -375,12 +421,12 @@ CHIP_ERROR Engine::BuildSingleReportDataEventReports(ReportDataMessage::Builder 
 exit:
     if (apHasEncodedData != nullptr)
     {
-        *apHasEncodedData = !(eventCount == 0 || eventClean);
+        *apHasEncodedData = hasEncodedStatus || (eventCount != 0);
     }
 
     // Maybe encoding the attributes has already used up all space.
     if ((err == CHIP_NO_ERROR || err == CHIP_ERROR_NO_MEMORY || err == CHIP_ERROR_BUFFER_TOO_SMALL) &&
-        (eventCount == 0 || eventClean))
+        !(hasEncodedStatus || (eventCount != 0)))
     {
         aReportDataBuilder.Rollback(backup);
         aReportDataBuilder.ResetError();
@@ -431,7 +477,7 @@ CHIP_ERROR Engine::BuildAndSendSingleReportData(ReadHandler * apReadHandler)
 
     reportDataWriter.Init(std::move(bufHandle));
 
-#if CONFIG_IM_BUILD_FOR_UNIT_TEST
+#if CONFIG_BUILD_FOR_HOST_UNIT_TEST
     reportDataWriter.ReserveBuffer(mReservedSize);
 #endif
 
@@ -515,15 +561,8 @@ CHIP_ERROR Engine::BuildAndSendSingleReportData(ReadHandler * apReadHandler)
                   mCurReadHandlerIdx, hasMoreChunks ? "more messages" : "no more messages");
 
 exit:
-    if (err != CHIP_NO_ERROR)
-    {
-        //
-        // WillSendMessage() was called on this EC well before it got here (since there was an intention to generate reports, which
-        // occurs asynchronously. Consequently, if any error occurs, it's on us to close down the exchange.
-        //
-        apReadHandler->Abort();
-    }
-    else if ((apReadHandler->IsType(ReadHandler::InteractionType::Read) && !hasMoreChunks) || needCloseReadHandler)
+    if (err != CHIP_NO_ERROR || (apReadHandler->IsType(ReadHandler::InteractionType::Read) && !hasMoreChunks) ||
+        needCloseReadHandler)
     {
         //
         // In the case of successful report generation and we're on the last chunk of a read, we don't expect
@@ -539,12 +578,13 @@ exit:
 void Engine::Run(System::Layer * aSystemLayer, void * apAppState)
 {
     Engine * const pEngine = reinterpret_cast<Engine *>(apAppState);
+    pEngine->mRunScheduled = false;
     pEngine->Run();
 }
 
 CHIP_ERROR Engine::ScheduleRun()
 {
-    if (mRunScheduled)
+    if (IsRunScheduled())
     {
         return CHIP_NO_ERROR;
     }
@@ -574,8 +614,6 @@ void Engine::Run()
     uint32_t numReadHandled = 0;
 
     InteractionModelEngine * imEngine = InteractionModelEngine::GetInstance();
-
-    mRunScheduled = false;
 
     // We may be deallocating read handlers as we go.  Track how many we had
     // initially, so we make sure to go through all of them.
@@ -615,8 +653,7 @@ void Engine::Run()
 
     bool allReadClean = true;
 
-    imEngine->mReadHandlers.ForEachActiveObject([this, &allReadClean](ReadHandler * handler) {
-        UpdateReadHandlerDirty(*handler);
+    imEngine->mReadHandlers.ForEachActiveObject([&allReadClean](ReadHandler * handler) {
         if (handler->IsDirty())
         {
             allReadClean = false;
@@ -801,50 +838,7 @@ CHIP_ERROR Engine::SetDirty(AttributePathParams & aAttributePath)
     }
     ReturnErrorOnFailure(InsertPathIntoDirtySet(aAttributePath));
 
-    // Schedule work to run asynchronously on the CHIP thread. The scheduled
-    // work won't execute until the current execution context has
-    // completed. This ensures that we can 'gather up' multiple attribute
-    // changes that have occurred in the same execution context without
-    // requiring any explicit 'start' or 'end' change calls into the engine to
-    // book-end the change.
-    ScheduleRun();
-
     return CHIP_NO_ERROR;
-}
-
-void Engine::UpdateReadHandlerDirty(ReadHandler & aReadHandler)
-{
-    if (!aReadHandler.IsDirty())
-    {
-        return;
-    }
-
-    if (!aReadHandler.IsType(ReadHandler::InteractionType::Subscribe))
-    {
-        return;
-    }
-
-    bool intersected = false;
-    for (auto object = aReadHandler.GetAttributePathList(); object != nullptr; object = object->mpNext)
-    {
-        mGlobalDirtySet.ForEachActiveObject([&](auto * path) {
-            if (path->Intersects(object->mValue) && path->mGeneration > aReadHandler.mPreviousReportsBeginGeneration)
-            {
-                intersected = true;
-                return Loop::Break;
-            }
-            return Loop::Continue;
-        });
-        if (intersected)
-        {
-            break;
-        }
-    }
-    if (!intersected)
-    {
-        aReadHandler.ClearDirty();
-        ChipLogDetail(InteractionModel, "clear read handler dirty in UpdateReadHandlerDirty!");
-    }
 }
 
 CHIP_ERROR Engine::SendReport(ReadHandler * apReadHandler, System::PacketBufferHandle && aPayload, bool aHasMoreChunks)
@@ -854,6 +848,10 @@ CHIP_ERROR Engine::SendReport(ReadHandler * apReadHandler, System::PacketBufferH
     // We can only have 1 report in flight for any given read - increment and break out.
     mNumReportsInFlight++;
     err = apReadHandler->SendReportData(std::move(aPayload), aHasMoreChunks);
+    if (err != CHIP_NO_ERROR)
+    {
+        --mNumReportsInFlight;
+    }
     return err;
 }
 
@@ -936,17 +934,22 @@ CHIP_ERROR Engine::ScheduleEventDelivery(ConcreteEventPath & aPath, uint32_t aBy
 
     if (isUrgentEvent)
     {
-        ChipLogDetail(DataManagement, "urgent event schedule run");
-        return ScheduleRun();
+        ChipLogDetail(DataManagement, "Urgent event will be sent once reporting is not blocked by the min interval");
+        return CHIP_NO_ERROR;
     }
 
     return ScheduleBufferPressureEventDelivery(aBytesWritten);
 }
 
-void Engine::ScheduleUrgentEventDeliverySync()
+void Engine::ScheduleUrgentEventDeliverySync(Optional<FabricIndex> fabricIndex)
 {
-    InteractionModelEngine::GetInstance()->mReadHandlers.ForEachActiveObject([](ReadHandler * handler) {
+    InteractionModelEngine::GetInstance()->mReadHandlers.ForEachActiveObject([fabricIndex](ReadHandler * handler) {
         if (handler->IsType(ReadHandler::InteractionType::Read))
+        {
+            return Loop::Continue;
+        }
+
+        if (fabricIndex.HasValue() && fabricIndex.Value() != handler->GetAccessingFabricIndex())
         {
             return Loop::Continue;
         }
@@ -965,3 +968,10 @@ void Engine::ScheduleUrgentEventDeliverySync()
 
 void __attribute__((weak)) MatterPreAttributeReadCallback(const chip::app::ConcreteAttributePath & attributePath) {}
 void __attribute__((weak)) MatterPostAttributeReadCallback(const chip::app::ConcreteAttributePath & attributePath) {}
+
+// TODO: MatterReportingAttributeChangeCallback should just live in libCHIP,
+// instead of being in ember-compatibility-functions.  It does not depend on any
+// app-specific generated bits.
+void __attribute__((weak))
+MatterReportingAttributeChangeCallback(chip::EndpointId endpoint, chip::ClusterId clusterId, chip::AttributeId attributeId)
+{}

@@ -119,10 +119,10 @@ DLL_EXPORT void InjectAsyncEvent();
         chip::System::FaultInjection::InjectAsyncEvent();                                                                          \
     } while (0)
 
-#else // CHIP_SYSTEM_CONFIG_TEST
+#else // CHIP_WITH_NLFAULTINJECTION
 
 #define CHIP_SYSTEM_FAULT_INJECT(aFaultId, aStatement)
 
 #define CHIP_SYSTEM_FAULT_INJECT_ASYNC_EVENT()
 
-#endif // CHIP_SYSTEM_CONFIG_TEST
+#endif // CHIP_WITH_NLFAULTINJECTION

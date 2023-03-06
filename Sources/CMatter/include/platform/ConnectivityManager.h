@@ -25,6 +25,7 @@
 #include <memory>
 
 #include <app/AttributeAccessInterface.h>
+#include <inet/UDPEndPoint.h>
 #include <lib/support/CodeUtils.h>
 #include <platform/CHIPDeviceBuildConfig.h>
 #include <platform/CHIPDeviceConfig.h>
@@ -32,6 +33,10 @@
 
 #include <app-common/zap-generated/cluster-objects.h>
 #include <app/util/basic-types.h>
+
+#if INET_CONFIG_ENABLE_TCP_ENDPOINT
+#include <inet/TCPEndPoint.h>
+#endif
 
 namespace chip {
 
@@ -158,6 +163,12 @@ public:
     void SetDelegate(ConnectivityManagerDelegate * delegate) { mDelegate = delegate; }
     ConnectivityManagerDelegate * GetDelegate() const { return mDelegate; }
 
+    chip::Inet::EndPointManager<Inet::UDPEndPoint> & UDPEndPointManager();
+
+#if INET_CONFIG_ENABLE_TCP_ENDPOINT
+    chip::Inet::EndPointManager<Inet::TCPEndPoint> & TCPEndPointManager();
+#endif
+
     // WiFi station methods
     WiFiStationMode GetWiFiStationMode();
     CHIP_ERROR SetWiFiStationMode(WiFiStationMode val);
@@ -213,13 +224,11 @@ public:
      *
      * @param[in]  onOff  true if active mode should be enabled and false otherwise.
      */
-    CHIP_ERROR RequestSEDActiveMode(bool onOff);
+    CHIP_ERROR RequestSEDActiveMode(bool onOff, bool delayIdle = false);
 #endif
 
     // CHIPoBLE service methods
     Ble::BleLayer * GetBleLayer();
-    CHIPoBLEServiceMode GetCHIPoBLEServiceMode();
-    CHIP_ERROR SetCHIPoBLEServiceMode(CHIPoBLEServiceMode val);
     bool IsBLEAdvertisingEnabled();
     /**
      * Enable or disable BLE advertising.
@@ -322,6 +331,18 @@ extern ConnectivityManagerImpl & ConnectivityMgrImpl();
 
 namespace chip {
 namespace DeviceLayer {
+
+inline chip::Inet::EndPointManager<Inet::UDPEndPoint> & ConnectivityManager::UDPEndPointManager()
+{
+    return static_cast<ImplClass *>(this)->_UDPEndPointManager();
+}
+
+#if INET_CONFIG_ENABLE_TCP_ENDPOINT
+inline chip::Inet::EndPointManager<Inet::TCPEndPoint> & ConnectivityManager::TCPEndPointManager()
+{
+    return static_cast<ImplClass *>(this)->_TCPEndPointManager();
+}
+#endif
 
 inline ConnectivityManager::WiFiStationMode ConnectivityManager::GetWiFiStationMode()
 {
@@ -459,9 +480,9 @@ inline CHIP_ERROR ConnectivityManager::SetSEDIntervalsConfig(const SEDIntervalsC
     return static_cast<ImplClass *>(this)->_SetSEDIntervalsConfig(intervalsConfig);
 }
 
-inline CHIP_ERROR ConnectivityManager::RequestSEDActiveMode(bool onOff)
+inline CHIP_ERROR ConnectivityManager::RequestSEDActiveMode(bool onOff, bool delayIdle)
 {
-    return static_cast<ImplClass *>(this)->_RequestSEDActiveMode(onOff);
+    return static_cast<ImplClass *>(this)->_RequestSEDActiveMode(onOff, delayIdle);
 }
 #endif
 
@@ -507,16 +528,6 @@ inline CHIP_ERROR ConnectivityManager::WriteThreadNetworkDiagnosticAttributeToTl
 inline Ble::BleLayer * ConnectivityManager::GetBleLayer()
 {
     return static_cast<ImplClass *>(this)->_GetBleLayer();
-}
-
-inline ConnectivityManager::CHIPoBLEServiceMode ConnectivityManager::GetCHIPoBLEServiceMode()
-{
-    return static_cast<ImplClass *>(this)->_GetCHIPoBLEServiceMode();
-}
-
-inline CHIP_ERROR ConnectivityManager::SetCHIPoBLEServiceMode(CHIPoBLEServiceMode val)
-{
-    return static_cast<ImplClass *>(this)->_SetCHIPoBLEServiceMode(val);
 }
 
 inline bool ConnectivityManager::IsBLEAdvertisingEnabled()

@@ -17,177 +17,196 @@
 
 #pragma once
 
-#include "lib/dnssd/platform/Dnssd.h"
-#include <lib/support/CHIPMemString.h>
+#include <dns_sd.h>
+#include <lib/dnssd/platform/Dnssd.h>
+
+#include "DnssdHostNameRegistrar.h"
+
+#include <map>
+#include <string>
+#include <vector>
 
 namespace chip {
 namespace Dnssd {
 
-namespace test {
-enum class CallType
+enum class ContextType
 {
-    kUnknown,
-    kStart,
-    kStop,
+    Register,
+    Browse,
+    Resolve,
 };
 
-struct ExpectedTxt
+struct GenericContext
 {
-    static constexpr size_t kMaxExpectedKeySize = 3;
-    static constexpr size_t kMaxExpectedValSize = 128;
-    char key[kMaxExpectedKeySize + 1]           = "";
-    char value[kMaxExpectedValSize + 1]         = "";
-    bool operator==(const TextEntry & txt) const
-    {
-        if (strlen(txt.mKey) > kMaxExpectedKeySize || strcmp(txt.mKey, key) != 0)
-        {
-            return false;
-        }
-        if (strlen(value) != txt.mDataSize || memcmp(value, txt.mData, txt.mDataSize) != 0)
-        {
-            return false;
-        }
-        return true;
-    }
+    ContextType type;
+    void * context;
+    DNSServiceRef serviceRef;
+
+    virtual ~GenericContext() {}
+
+    CHIP_ERROR Finalize(DNSServiceErrorType err = kDNSServiceErr_NoError);
+    virtual void DispatchFailure(DNSServiceErrorType err) = 0;
+    virtual void DispatchSuccess()                        = 0;
 };
 
-struct ExpectedSubtype
+struct RegisterContext;
+struct ResolveContext;
+
+class MdnsContexts
 {
-    char name[Common::kSubTypeMaxLength + 1] = "";
-    bool operator==(const char * subtype) const { return strcmp(name, subtype) == 0; }
-};
-struct ExpectedCall
-{
-    ExpectedCall & AddTxt(const char * key, const char * val)
-    {
-        if (numTxt < kMaxTxtRecords)
-        {
-            Platform::CopyString(txt[numTxt].key, key);
-            Platform::CopyString(txt[numTxt].value, val);
-            numTxt++;
-        }
-        return *this;
-    }
-    ExpectedCall & AddSubtype(const char * sub)
-    {
-        if (numSubtypes < kMaxSubtypes)
-        {
+public:
+    MdnsContexts(const MdnsContexts &) = delete;
+    MdnsContexts & operator=(const MdnsContexts &) = delete;
+    ~MdnsContexts();
+    static MdnsContexts & GetInstance() { return sInstance; }
 
-            Platform::CopyString(subtype[numSubtypes++].name, sub);
-        }
-        return *this;
-    }
-    ExpectedCall & SetServiceName(const char * name)
-    {
-        Platform::CopyString(serviceName, name);
-        return *this;
-    }
-    ExpectedCall & SetInstanceName(const char * name)
-    {
-        Platform::CopyString(instanceName, name);
-        return *this;
-    }
-    ExpectedCall & SetHostName(const char * name)
-    {
-        Platform::CopyString(hostName, name);
-        return *this;
-    }
-    ExpectedCall & SetProtocol(DnssdServiceProtocol prot)
-    {
-        protocol = prot;
-        return *this;
-    }
-    bool TxtIsExpected(const TextEntry & entry) const
-    {
-        for (size_t i = 0; i < numTxt; ++i)
-        {
-            if (txt[i] == entry)
-            {
-                return true;
-            }
-        }
-        return false;
-    }
-    bool SubtypeIsExpected(const char * sub) const
-    {
-        for (size_t i = 0; i < numSubtypes; ++i)
-        {
-            if (subtype[i] == sub)
-            {
-                return true;
-            }
-        }
-        return false;
-    }
+    CHIP_ERROR Add(GenericContext * context, DNSServiceRef sdRef);
+    CHIP_ERROR Remove(GenericContext * context);
+    CHIP_ERROR RemoveAllOfType(ContextType type);
+    CHIP_ERROR Has(GenericContext * context);
 
-    bool CheckMatch(CallType call, const DnssdService * service) const
+    /**
+     * @brief
+     *   Returns a pointer to a RegisterContext that has previously been registered
+     *   with a given type.
+     *
+     * @param[in]  type     A service type. Service type are composed of
+     *                      of the service name, the service protocol, and the PTR records.
+     *                      Example:
+     *                        _matterc._udp,_V65521,_S15,_L3840,_CM
+     *                        _matter._tcp,_I4CEEAD044CC35B63
+     * @param[out] context  A reference to the context previously registered
+     *
+     * @return     On success, the context parameter will point to the previously
+     *             registered context.
+     */
+    CHIP_ERROR GetRegisterContextOfType(const char * type, RegisterContext ** context);
+
+    /**
+     * Return a pointer to an existing ResolveContext for the given
+     * instanceName, if any.  Returns nullptr if there are none.
+     */
+    ResolveContext * GetExistingResolveForInstanceName(const char * instanceName);
+
+    /**
+     * Remove context from the list, if it's present in the list.  Return
+     * whether it was present.
+     */
+    bool RemoveWithoutDeleting(GenericContext * context);
+
+    void Delete(GenericContext * context);
+
+    /**
+     * Fill the provided vector with all contexts for which the given predicate
+     * returns true.
+     */
+    template <typename F>
+    void FindAllMatchingPredicate(F predicate, std::vector<GenericContext *> & results)
     {
-        bool callOk       = call == callType;
-        bool instanceOk   = strcmp(instanceName, service->mName) == 0;
-        bool hostOk       = strcmp(hostName, service->mHostName) == 0;
-        bool serviceOk    = strcmp(serviceName, service->mType) == 0;
-        bool subtypeNumOk = numSubtypes == service->mSubTypeSize;
-        bool txtNumOk     = numTxt == service->mTextEntrySize;
-        if (!callOk || !instanceOk || !hostOk || !serviceOk || !subtypeNumOk || !txtNumOk)
+        results.clear();
+        for (auto & ctx : mContexts)
         {
-            return false;
-        }
-        // There aren't a lot of these, so just double loop for now.
-        // The orders of the txt and subtypes don't necessarily match.
-        for (size_t i = 0; i < service->mSubTypeSize; ++i)
-        {
-            if (!SubtypeIsExpected(service->mSubTypes[i]))
+            if (predicate(ctx))
             {
-                return false;
+                results.push_back(ctx);
             }
-        }
-        for (size_t i = 0; i < service->mTextEntrySize; ++i)
-        {
-            if (!TxtIsExpected(service->mTextEntries[i]))
-            {
-                return false;
-            }
-        }
-        return true;
-    }
-    void PrintForDebugging()
-    {
-        ChipLogProgress(Discovery, "Call type %d", static_cast<int>(callType));
-        ChipLogProgress(Discovery, "protocol %d", static_cast<int>(protocol));
-        ChipLogProgress(Discovery, "instanceName = %s", instanceName);
-        ChipLogProgress(Discovery, "hostName = %s", hostName);
-        ChipLogProgress(Discovery, "serviceName = %s", serviceName);
-        ChipLogProgress(Discovery, "num subtypes = %lu", static_cast<unsigned long>(numSubtypes));
-        for (size_t i = 0; i < numSubtypes; ++i)
-        {
-            ChipLogProgress(Discovery, "\t%s", subtype[i].name);
-        }
-        ChipLogProgress(Discovery, "num txt = %lu", static_cast<unsigned long>(numTxt));
-        for (size_t i = 0; i < numSubtypes; ++i)
-        {
-            ChipLogProgress(Discovery, "\t%s = %s", txt[i].key, txt[i].value);
         }
     }
 
-    static constexpr size_t kMaxTxtRecords                = 11;
-    static constexpr size_t kMaxSubtypes                  = 10;
-    CallType callType                                     = CallType::kUnknown;
-    DnssdServiceProtocol protocol                         = DnssdServiceProtocol::kDnssdProtocolUnknown;
-    char instanceName[Common::kInstanceNameMaxLength + 1] = "";
-    char hostName[kHostNameMaxLength + 1]                 = "";
-    char serviceName[kDnssdTypeMaxSize + 1]               = "";
-    ExpectedSubtype subtype[kMaxSubtypes];
-    size_t numSubtypes = 0;
-    ExpectedTxt txt[kMaxTxtRecords];
-    size_t numTxt = 0;
+private:
+    MdnsContexts(){};
+    static MdnsContexts sInstance;
 
-    bool IsValid() const { return callType != CallType::kUnknown && protocol != DnssdServiceProtocol::kDnssdProtocolUnknown; }
+    std::vector<GenericContext *> mContexts;
 };
 
-CHIP_ERROR AddExpectedCall(const ExpectedCall & call);
-void Reset();
+struct RegisterContext : public GenericContext
+{
+    DnssdPublishCallback callback;
+    std::string mType;
+    std::string mInstanceName;
+    HostNameRegistrar mHostNameRegistrar;
 
-} // namespace test
+    RegisterContext(const char * sType, const char * instanceName, DnssdPublishCallback cb, void * cbContext);
+    virtual ~RegisterContext() { mHostNameRegistrar.Unregister(); }
+
+    void DispatchFailure(DNSServiceErrorType err) override;
+    void DispatchSuccess() override;
+
+    bool matches(const char * sType) { return mType.compare(sType) == 0; }
+};
+
+struct BrowseContext : public GenericContext
+{
+    DnssdBrowseCallback callback;
+    std::vector<DnssdService> services;
+    DnssdServiceProtocol protocol;
+
+    BrowseContext(void * cbContext, DnssdBrowseCallback cb, DnssdServiceProtocol cbContextProtocol);
+    virtual ~BrowseContext() {}
+
+    void DispatchFailure(DNSServiceErrorType err) override;
+    void DispatchSuccess() override;
+
+    // Dispatch what we have found so far, but don't stop browsing.
+    void DispatchPartialSuccess();
+
+    // While we are dispatching partial success, sContextDispatchingSuccess will
+    // be set to the BrowseContext doing the dispatch.  This allows resolves
+    // triggered by the browse dispatch to be associated with the browse.  This
+    // relies on our consumer starting the resolves synchronously from the
+    // partial success callback.
+    //
+    // The other option would be to do the resolve ourselves before signaling
+    // browse success, but that would only allow us to pass in one ip per
+    // discovered hostname, and we want to pass in all the IPs we resolve.
+    //
+    // TODO: Consider fixing the higher-level APIs to make it possible to pass
+    // in multiple IPs for a successful browse result.
+    static BrowseContext * sContextDispatchingSuccess;
+};
+
+struct InterfaceInfo
+{
+    InterfaceInfo();
+    InterfaceInfo(InterfaceInfo && other);
+    // Copying is not safe, because DnssdService bits need to be
+    // copied/deallocated properly.
+    InterfaceInfo(const InterfaceInfo & other) = delete;
+    ~InterfaceInfo();
+
+    DnssdService service;
+    std::vector<Inet::IPAddress> addresses;
+    std::string fullyQualifiedDomainName;
+};
+
+struct ResolveContext : public GenericContext
+{
+    DnssdResolveCallback callback;
+    std::map<uint32_t, InterfaceInfo> interfaces;
+    DNSServiceProtocol protocol;
+    std::string instanceName;
+    std::shared_ptr<uint32_t> consumerCounter;
+    BrowseContext * const browseThatCausedResolve; // Can be null
+
+    // browseCausingResolve can be null.
+    ResolveContext(void * cbContext, DnssdResolveCallback cb, chip::Inet::IPAddressType cbAddressType,
+                   const char * instanceNameToResolve, BrowseContext * browseCausingResolve,
+                   std::shared_ptr<uint32_t> && consumerCounterToUse);
+    virtual ~ResolveContext();
+
+    void DispatchFailure(DNSServiceErrorType err) override;
+    void DispatchSuccess() override;
+
+    CHIP_ERROR OnNewAddress(uint32_t interfaceId, const struct sockaddr * address);
+    CHIP_ERROR OnNewLocalOnlyAddress();
+    bool HasAddress();
+
+    void OnNewInterface(uint32_t interfaceId, const char * fullname, const char * hostname, uint16_t port, uint16_t txtLen,
+                        const unsigned char * txtRecord);
+    bool HasInterface();
+    bool Matches(const char * otherInstanceName) const { return instanceName == otherInstanceName; }
+};
 
 } // namespace Dnssd
 } // namespace chip

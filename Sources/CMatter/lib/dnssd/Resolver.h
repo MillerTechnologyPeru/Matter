@@ -56,9 +56,9 @@ struct CommonResolutionData
 
     bool IsValid() const { return !IsHost("") && (numIPs > 0) && (ipAddress[0] != chip::Inet::IPAddress::Any); }
 
-    ReliableMessageProtocolConfig GetMRPConfig() const
+    ReliableMessageProtocolConfig GetRemoteMRPConfig() const
     {
-        const ReliableMessageProtocolConfig defaultConfig = GetLocalMRPConfig();
+        const ReliableMessageProtocolConfig defaultConfig = GetDefaultMRPConfig();
         return ReliableMessageProtocolConfig(GetMrpRetryIntervalIdle().ValueOr(defaultConfig.mIdleRetransTimeout),
                                              GetMrpRetryIntervalActive().ValueOr(defaultConfig.mActiveRetransTimeout));
     }
@@ -125,6 +125,7 @@ struct CommonResolutionData
         {
             ChipLogDetail(Discovery, "\tMrp Interval active: not present");
         }
+        ChipLogDetail(Discovery, "\tTCP Supported: %d", supportsTcp);
     }
 };
 
@@ -148,13 +149,12 @@ struct CommissionNodeData
     uint16_t vendorId                                         = 0;
     uint16_t productId                                        = 0;
     uint8_t commissioningMode                                 = 0;
-    // TODO: possibly 32-bit - see spec issue #3226
-    uint16_t deviceType                                    = 0;
-    char deviceName[kMaxDeviceNameLen + 1]                 = {};
-    uint8_t rotatingId[kMaxRotatingIdLen]                  = {};
-    size_t rotatingIdLen                                   = 0;
-    uint16_t pairingHint                                   = 0;
-    char pairingInstruction[kMaxPairingInstructionLen + 1] = {};
+    uint32_t deviceType                                       = 0;
+    char deviceName[kMaxDeviceNameLen + 1]                    = {};
+    uint8_t rotatingId[kMaxRotatingIdLen]                     = {};
+    size_t rotatingIdLen                                      = 0;
+    uint16_t pairingHint                                      = 0;
+    char pairingInstruction[kMaxPairingInstructionLen + 1]    = {};
 
     CommissionNodeData() {}
 
@@ -189,7 +189,7 @@ struct CommissionNodeData
         }
         if (deviceType > 0)
         {
-            ChipLogDetail(Discovery, "\tDevice Type: %u", deviceType);
+            ChipLogDetail(Discovery, "\tDevice Type: %" PRIu32, deviceType);
         }
         if (longDiscriminator > 0)
         {
@@ -243,6 +243,7 @@ struct DiscoveredNodeData
 
     void LogDetail() const
     {
+        ChipLogDetail(Discovery, "Discovered node:");
         resolutionData.LogDetail();
         commissionData.LogDetail();
     }
@@ -344,7 +345,14 @@ public:
      * The method must be called before other methods of this class.
      * If the resolver has already been initialized, the method exits immediately with no error.
      */
-    virtual CHIP_ERROR Init(chip::Inet::EndPointManager<Inet::UDPEndPoint> * endPointManager) = 0;
+    virtual CHIP_ERROR Init(Inet::EndPointManager<Inet::UDPEndPoint> * endPointManager) = 0;
+
+    /**
+     * Returns whether the resolver has completed the initialization.
+     *
+     * Returns true if the resolver is ready to take node resolution and discovery requests.
+     */
+    virtual bool IsInitialized() = 0;
 
     /**
      * Shuts down the resolver if it has been initialized before.
@@ -367,10 +375,37 @@ public:
      * This will trigger a DNSSD query.
      *
      * When the operation succeeds or fails, and a resolver delegate has been registered,
-     * the result of the operation is passed to the delegate's `OnNodeIdResolved` or
-     * `OnNodeIdResolutionFailed` method, respectively.
+     * the result of the operation is passed to the delegate's `OnOperationalNodeResolved` or
+     * `OnOperationalNodeResolutionFailed` method, respectively.
+     *
+     * Multiple calls to ResolveNodeId may be coalesced by the implementation
+     * and lead to just one call to
+     * OnOperationalNodeResolved/OnOperationalNodeResolutionFailed, as long as
+     * the later calls cause the underlying querying mechanism to re-query as if
+     * there were no coalescing.
+     *
+     * A single call to ResolveNodeId may lead to multiple calls to
+     * OnOperationalNodeResolved with different IP addresses.
+     *
+     * @see NodeIdResolutionNoLongerNeeded.
      */
-    virtual CHIP_ERROR ResolveNodeId(const PeerId & peerId, Inet::IPAddressType type) = 0;
+    virtual CHIP_ERROR ResolveNodeId(const PeerId & peerId) = 0;
+
+    /*
+     * Notify the resolver that one of the consumers that called ResolveNodeId
+     * successfully no longer needs the resolution result (e.g. because it got
+     * the result via OnOperationalNodeResolved, or got an via
+     * OnOperationalNodeResolutionFailed, or no longer cares about future
+     * updates).
+     *
+     * There must be a NodeIdResolutionNoLongerNeeded call that matches every
+     * successful ResolveNodeId call.  In particular, implementations of
+     * OnOperationalNodeResolved and OnOperationalNodeResolutionFailed must call
+     * NodeIdResolutionNoLongerNeeded once for each prior successful call to
+     * ResolveNodeId for the relevant PeerId that has not yet had a matching
+     * NodeIdResolutionNoLongerNeeded call made.
+     */
+    virtual void NodeIdResolutionNoLongerNeeded(const PeerId & peerId) = 0;
 
     /**
      * Finds all commissionable nodes matching the given filter.
@@ -378,7 +413,7 @@ public:
      * Whenever a new matching node is found and a resolver delegate has been registered,
      * the node information is passed to the delegate's `OnNodeDiscoveryComplete` method.
      */
-    virtual CHIP_ERROR FindCommissionableNodes(DiscoveryFilter filter = DiscoveryFilter()) = 0;
+    virtual CHIP_ERROR DiscoverCommissionableNodes(DiscoveryFilter filter = DiscoveryFilter()) = 0;
 
     /**
      * Finds all commissioner nodes matching the given filter.
@@ -386,7 +421,21 @@ public:
      * Whenever a new matching node is found and a resolver delegate has been registered,
      * the node information is passed to the delegate's `OnNodeDiscoveryComplete` method.
      */
-    virtual CHIP_ERROR FindCommissioners(DiscoveryFilter filter = DiscoveryFilter()) = 0;
+    virtual CHIP_ERROR DiscoverCommissioners(DiscoveryFilter filter = DiscoveryFilter()) = 0;
+
+    /**
+     * Stop discovery (of commissionable or commissioner nodes).
+     *
+     * Some back ends may not support stopping discovery, so consumers should
+     * not assume they will stop getting callbacks after calling this.
+     */
+    virtual CHIP_ERROR StopDiscovery() = 0;
+
+    /**
+     * Verify the validity of an address that appears to be out of date (for example
+     * because establishing a connection to it has failed).
+     */
+    virtual CHIP_ERROR ReconfirmRecord(const char * hostname, Inet::IPAddress address, Inet::InterfaceId interfaceId) = 0;
 
     /**
      * Provides the system-wide implementation of the service resolver

@@ -15,22 +15,6 @@
  *    limitations under the License.
  */
 
-/**
- *
- *    Copyright (c) 2020 Silicon Labs
- *
- *    Licensed under the Apache License, Version 2.0 (the "License");
- *    you may not use this file except in compliance with the License.
- *    You may obtain a copy of the License at
- *
- *        http://www.apache.org/licenses/LICENSE-2.0
- *
- *    Unless required by applicable law or agreed to in writing, software
- *    distributed under the License is distributed on an "AS IS" BASIS,
- *    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *    See the License for the specific language governing permissions and
- *    limitations under the License.
- */
 #pragma once
 
 #include <app/util/basic-types.h>
@@ -121,6 +105,17 @@ union EmberAfDefaultOrMinMaxAttributeValue
     const EmberAfAttributeMinMaxValue * ptrToMinMaxValue;
 };
 
+enum class EmberAfAttributeWritePermission
+{
+    DenyWrite            = 0,
+    AllowWriteNormal     = 1,
+    AllowWriteOfReadOnly = 2,
+    UnsupportedAttribute = 0x86, // Protocols::InteractionModel::Status::UnsupportedAttribute
+    InvalidValue         = 0x87, // Protocols::InteractionModel::Status::ConstraintError
+    ReadOnly             = 0x88, // Protocols::InteractionModel::Status::UnsupportedWrite
+    InvalidDataType      = 0x8d, // Protocols::InteractionModel::Status::InvalidDataType
+};
+
 // Attribute masks modify how attributes are used by the framework
 //
 // Attribute that has this mask is NOT read-only
@@ -148,27 +143,31 @@ union EmberAfDefaultOrMinMaxAttributeValue
 struct EmberAfAttributeMetadata
 {
     /**
+     * Pointer to the default value union. Actual value stored
+     * depends on the mask.
+     */
+    EmberAfDefaultOrMinMaxAttributeValue defaultValue;
+
+    /**
      * Attribute ID, according to ZCL specs.
      */
     chip::AttributeId attributeId;
-    /**
-     * Attribute type, according to ZCL specs.
-     */
-    EmberAfAttributeType attributeType;
+
     /**
      * Size of this attribute in bytes.
      */
     uint16_t size;
+
+    /**
+     * Attribute type, according to ZCL specs.
+     */
+    EmberAfAttributeType attributeType;
+
     /**
      * Attribute mask, tagging attribute with specific
      * functionality.
      */
     EmberAfAttributeMask mask;
-    /**
-     * Pointer to the default value union. Actual value stored
-     * depends on the mask.
-     */
-    EmberAfDefaultOrMinMaxAttributeValue defaultValue;
 
     /**
      * Check whether this attribute is nullable.
@@ -192,10 +191,17 @@ struct EmberAfAttributeMetadata
     bool IsExternal() const { return mask & ATTRIBUTE_MASK_EXTERNAL_STORAGE; }
 
     /**
+     * Check whether this is a "singleton" attribute, in the sense that it has a
+     * single value across multiple instances of the cluster.  This is not
+     * mutually exclusive with the attribute being external.
+     */
+    bool IsSingleton() const { return mask & ATTRIBUTE_MASK_SINGLETON; }
+
+    /**
      * Check whether this attribute is automatically stored in non-volatile
      * memory.
      */
-    bool IsNonVolatile() const { return (mask & ATTRIBUTE_MASK_NONVOLATILE) && !IsExternal(); }
+    bool IsAutomaticallyPersisted() const { return (mask & ATTRIBUTE_MASK_NONVOLATILE) && !IsExternal(); }
 };
 
 /** @brief Returns true if the given attribute type is a string. */

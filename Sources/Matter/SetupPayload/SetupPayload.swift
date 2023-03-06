@@ -18,7 +18,7 @@ public struct SetupPayload: Equatable, Hashable, Codable {
     
     public var commissioningFlow: CommissioningFlow
     
-    public var rendezvousInformation: RendezvousInformationFlags
+    public var rendezvousInformation: RendezvousInformationFlags?
     
     public var discriminator: UInt16
     
@@ -32,7 +32,7 @@ public struct SetupPayload: Equatable, Hashable, Codable {
          vendorID: UInt16,
          productID: UInt16,
          commissioningFlow: CommissioningFlow = .standard,
-         rendezvousInformation: RendezvousInformationFlags = [],
+         rendezvousInformation: RendezvousInformationFlags?,
          discriminator: UInt16,
          setupPinCode: UInt32,
          serialNumber: String? = nil,
@@ -92,14 +92,18 @@ extension SetupPayload: ReferenceConvertible {
             set { cxxObject.commissioningFlow = .init(newValue) }
         }
         
-        var rendezvousInformation: RendezvousInformationFlags {
-            get { .init(cxxObject.rendezvousInformation) }
-            set { cxxObject.rendezvousInformation = .init(newValue) }
+        var rendezvousInformation: RendezvousInformationFlags? {
+            get { cxxObject.rendezvousInformation.HasValue() ? .init(cxxObject.rendezvousInformation.Value().pointee) : nil }
+            set { cxxObject.rendezvousInformation = newValue.flatMap { .init(.init(.init($0))) } ?? .Missing() }
         }
         
         var discriminator: UInt16 {
-            get { cxxObject.discriminator }
-            set { cxxObject.discriminator = newValue }
+            get { cxxObject.discriminator.longValue }
+            set {
+                var descriminator = chip.SetupDiscriminator()
+                descriminator.SetLongValue(newValue)
+                cxxObject.discriminator = descriminator
+            }
         }
         
         var setupPinCode: UInt32 {
@@ -207,10 +211,13 @@ internal extension chip.PayloadContents {
             vendorID: value.vendorID,
             productID: value.productID,
             commissioningFlow: .init(value.commissioningFlow),
-            rendezvousInformation: .init(value.rendezvousInformation),
-            discriminator: value.discriminator,
-            setUpPINCode: value.setupPinCode,
-            isShortDiscriminator: false // TODO: isShortDiscriminator
+            rendezvousInformation: value.rendezvousInformation.flatMap { .init(.init(.init($0))) } ?? .Missing(),
+            discriminator: {
+                var descriminator = chip.SetupDiscriminator()
+                descriminator.SetLongValue(value.discriminator)
+                return descriminator
+            }(),
+            setUpPINCode: value.setupPinCode
         )
     }
 }

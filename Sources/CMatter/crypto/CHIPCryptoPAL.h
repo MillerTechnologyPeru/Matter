@@ -24,7 +24,7 @@
 
 #if CHIP_HAVE_CONFIG_H
 #include <crypto/CryptoBuildConfig.h>
-#endif
+#endif // CHIP_HAVE_CONFIG_H
 
 #include <system/SystemConfig.h>
 
@@ -32,6 +32,7 @@
 #include <lib/core/CHIPVendorIdentifiers.hpp>
 #include <lib/core/Optional.h>
 #include <lib/support/CodeUtils.h>
+#include <lib/support/SafePointerCast.h>
 #include <lib/support/Span.h>
 
 #include <stddef.h>
@@ -78,10 +79,8 @@ constexpr size_t kP256_PublicKey_Length  = CHIP_CRYPTO_PUBLIC_KEY_SIZE_BYTES;
 
 constexpr size_t kAES_CCM128_Key_Length   = 128u / 8u;
 constexpr size_t kAES_CCM128_Block_Length = kAES_CCM128_Key_Length;
-
-// TODO: Remove AES-256 from CryptoPAL since not required by V1 spec
-constexpr size_t kAES_CCM256_Key_Length   = 256u / 8u;
-constexpr size_t kAES_CCM256_Block_Length = kAES_CCM256_Key_Length;
+constexpr size_t kAES_CCM128_Nonce_Length = 13;
+constexpr size_t kAES_CCM128_Tag_Length   = 16;
 
 /* These sizes are hardcoded here to remove header dependency on underlying crypto library
  * in a public interface file. The validity of these sizes is verified by static_assert in
@@ -172,6 +171,12 @@ enum class SupportedECPKeyTypes : uint8_t
     ECP256R1 = 0,
 };
 
+enum class ECPKeyTarget : uint8_t
+{
+    ECDH  = 0,
+    ECDSA = 1,
+};
+
 /** @brief Safely clears the first `len` bytes of memory area `buf`.
  * @param buf Pointer to a memory buffer holding secret data that must be cleared.
  * @param len Specifies secret data size in bytes.
@@ -187,6 +192,19 @@ void ClearSecretData(uint8_t (&buf)[N])
     ClearSecretData(buf, N);
 }
 
+/**
+ * @brief Constant-time buffer comparison
+ *
+ * This function implements constant time memcmp. It's good practice
+ * to use constant time functions for cryptographic functions.
+ *
+ * @param a Pointer to first buffer
+ * @param b Pointer to Second buffer
+ * @param n Number of bytes to compare
+ * @return true if `n` first bytes of both buffers are equal, false otherwise
+ */
+bool IsBufferContentEqualConstantTime(const void * a, const void * b, size_t n);
+
 template <typename Sig>
 class ECPKey
 {
@@ -200,73 +218,150 @@ public:
     virtual const uint8_t * ConstBytes() const = 0;
     virtual uint8_t * Bytes()                  = 0;
 
+    virtual bool Matches(const ECPKey<Sig> & other) const
+    {
+        return (this->Length() == other.Length()) &&
+            IsBufferContentEqualConstantTime(this->ConstBytes(), other.ConstBytes(), this->Length());
+    }
+
     virtual CHIP_ERROR ECDSA_validate_msg_signature(const uint8_t * msg, const size_t msg_length, const Sig & signature) const = 0;
     virtual CHIP_ERROR ECDSA_validate_hash_signature(const uint8_t * hash, const size_t hash_length,
                                                      const Sig & signature) const                                              = 0;
 };
 
-template <size_t Cap>
-class CapacityBoundBuffer
+/**
+ * @brief Helper class for holding sensitive data that should be erased from memory after use.
+ *
+ * The sensitive data buffer is a variable-length, fixed-capacity buffer class that securely erases
+ * the contents of a buffer when the buffer is destroyed.
+ */
+template <size_t kCapacity>
+class SensitiveDataBuffer
 {
 public:
-    ~CapacityBoundBuffer()
+    ~SensitiveDataBuffer()
     {
         // Sanitize after use
-        ClearSecretData(&bytes[0], Cap);
+        ClearSecretData(mBytes);
     }
 
-    CapacityBoundBuffer & operator=(const CapacityBoundBuffer & other)
+    SensitiveDataBuffer & operator=(const SensitiveDataBuffer & other)
     {
         // Guard self assignment
         if (this == &other)
             return *this;
 
-        ClearSecretData(&bytes[0], Cap);
+        ClearSecretData(mBytes);
         SetLength(other.Length());
-        ::memcpy(Bytes(), other.Bytes(), other.Length());
+        ::memcpy(Bytes(), other.ConstBytes(), other.Length());
         return *this;
     }
 
-    /** @brief Set current length of the buffer that's being used
-     * @return Returns error if new length is > capacity
-     **/
-    CHIP_ERROR SetLength(size_t len)
+    /**
+     * @brief Set current length of the buffer
+     * @return Error if new length is exceeds capacity of the buffer
+     */
+    CHIP_ERROR SetLength(size_t length)
     {
-        VerifyOrReturnError(len <= sizeof(bytes), CHIP_ERROR_INVALID_ARGUMENT);
-        length = len;
+        VerifyOrReturnError(length <= kCapacity, CHIP_ERROR_INVALID_ARGUMENT);
+        mLength = length;
         return CHIP_NO_ERROR;
     }
 
-    /** @brief Returns current length of the buffer that's being used
-     * @return Returns 0 if SetLength() was never called
-     **/
-    size_t Length() const { return length; }
+    /**
+     * @brief Returns current length of the buffer
+     */
+    size_t Length() const { return mLength; }
 
-    /** @brief Returns max capacity of the buffer
-     **/
-    static constexpr size_t Capacity() { return sizeof(bytes); }
+    /**
+     * @brief Returns non-const pointer to start of the underlying buffer
+     */
+    uint8_t * Bytes() { return &mBytes[0]; }
 
-    /** @brief Returns pointer to start of underlying buffer
-     **/
-    uint8_t * Bytes() { return &bytes[0]; }
+    /**
+     * @brief Returns const pointer to start of the underlying buffer
+     */
+    const uint8_t * ConstBytes() const { return &mBytes[0]; }
 
-    /** @brief Returns const pointer to start of underlying buffer
-     **/
-    const uint8_t * ConstBytes() const { return &bytes[0]; }
+    /**
+     * @brief Constructs span from the underlying buffer
+     */
+    ByteSpan Span() const { return ByteSpan(ConstBytes(), Length()); }
 
-    /** @brief Returns buffer pointer
-     **/
-    operator uint8_t *() { return bytes; }
-    operator const uint8_t *() const { return bytes; }
+    /**
+     * @brief Returns capacity of the buffer
+     */
+    static constexpr size_t Capacity() { return kCapacity; }
 
 private:
-    uint8_t bytes[Cap];
-    size_t length = 0;
+    uint8_t mBytes[kCapacity];
+    size_t mLength = 0;
 };
 
-typedef CapacityBoundBuffer<kMax_ECDSA_Signature_Length> P256ECDSASignature;
+/**
+ * @brief Helper class for holding fixed-sized sensitive data that should be erased from memory after use.
+ *
+ * The sensitive data buffer is a fixed-length, fixed-capacity buffer class that securely erases
+ * the contents of a buffer when the buffer is destroyed.
+ */
+template <size_t kCapacity>
+class SensitiveDataFixedBuffer
+{
+public:
+    SensitiveDataFixedBuffer() = default;
 
-typedef CapacityBoundBuffer<kMax_ECDH_Secret_Length> P256ECDHDerivedSecret;
+    constexpr explicit SensitiveDataFixedBuffer(const uint8_t (&rawValue)[kCapacity])
+    {
+        memcpy(&mBytes[0], &rawValue[0], kCapacity);
+    }
+
+    constexpr explicit SensitiveDataFixedBuffer(const FixedByteSpan<kCapacity> & value)
+    {
+        memcpy(&mBytes[0], value.data(), kCapacity);
+    }
+
+    ~SensitiveDataFixedBuffer()
+    {
+        // Sanitize after use
+        ClearSecretData(mBytes);
+    }
+
+    /**
+     * @brief Returns fixed length of the buffer
+     */
+    constexpr size_t Length() const { return kCapacity; }
+
+    /**
+     * @brief Returns non-const pointer to start of the underlying buffer
+     */
+    uint8_t * Bytes() { return &mBytes[0]; }
+
+    /**
+     * @brief Returns const pointer to start of the underlying buffer
+     */
+    const uint8_t * ConstBytes() const { return &mBytes[0]; }
+
+    /**
+     * @brief Constructs fixed span from the underlying buffer
+     */
+    FixedByteSpan<kCapacity> Span() const { return FixedByteSpan<kCapacity>(mBytes); }
+
+    /**
+     * @brief Returns capacity of the buffer
+     */
+    static constexpr size_t Capacity() { return kCapacity; }
+
+private:
+    uint8_t mBytes[kCapacity];
+};
+
+using P256ECDSASignature    = SensitiveDataBuffer<kMax_ECDSA_Signature_Length>;
+using P256ECDHDerivedSecret = SensitiveDataBuffer<kMax_ECDH_Secret_Length>;
+
+using IdentityProtectionKey     = SensitiveDataFixedBuffer<CHIP_CRYPTO_SYMMETRIC_KEY_LENGTH_BYTES>;
+using IdentityProtectionKeySpan = FixedByteSpan<Crypto::CHIP_CRYPTO_SYMMETRIC_KEY_LENGTH_BYTES>;
+
+using AttestationChallenge = SensitiveDataFixedBuffer<CHIP_CRYPTO_SYMMETRIC_KEY_LENGTH_BYTES>;
 
 class P256PublicKey : public ECPKey<P256ECDSASignature>
 {
@@ -285,6 +380,14 @@ public:
     {
         static_assert(N == kP256_PublicKey_Length, "Can only initialize from proper sized byte span");
         memcpy(&bytes[0], value.data(), N);
+    }
+
+    template <size_t N>
+    P256PublicKey & operator=(const FixedByteSpan<N> & value)
+    {
+        static_assert(N == kP256_PublicKey_Length, "Can only initialize from proper sized byte span");
+        memcpy(&bytes[0], value.data(), N);
+        return *this;
     }
 
     SupportedECPKeyTypes Type() const override { return SupportedECPKeyTypes::ECP256R1; }
@@ -334,16 +437,6 @@ public:
      **/
     virtual CHIP_ERROR ECDSA_sign_msg(const uint8_t * msg, size_t msg_length, Sig & out_signature) const = 0;
 
-    /**
-     * @brief A function to sign a hash using ECDSA
-     * @param hash Hash that needs to be signed
-     * @param hash_length Length of hash
-     * @param out_signature Buffer that will hold the output signature. The signature consists of: 2 EC elements (r and s),
-     * in raw <r,s> point form (see SEC1).
-     * @return Returns a CHIP_ERROR on error, CHIP_NO_ERROR otherwise
-     **/
-    virtual CHIP_ERROR ECDSA_sign_hash(const uint8_t * hash, size_t hash_length, Sig & out_signature) const = 0;
-
     /** @brief A function to derive a shared secret using ECDH
      * @param remote_public_key Public key of remote peer with which we are trying to establish secure channel. remote_public_key is
      * ASN.1 DER encoded as padded big-endian field elements as described in SEC 1: Elliptic Curve Cryptography
@@ -361,7 +454,7 @@ struct alignas(size_t) P256KeypairContext
     uint8_t mBytes[kMAX_P256Keypair_Context_Size];
 };
 
-typedef CapacityBoundBuffer<kP256_PublicKey_Length + kP256_PrivateKey_Length> P256SerializedKeypair;
+using P256SerializedKeypair = SensitiveDataBuffer<kP256_PublicKey_Length + kP256_PrivateKey_Length>;
 
 class P256KeypairBase : public ECPKeypair<P256PublicKey, P256ECDHDerivedSecret, P256ECDSASignature>
 {
@@ -370,7 +463,7 @@ public:
      * @brief Initialize the keypair.
      * @return Returns a CHIP_ERROR on error, CHIP_NO_ERROR otherwise
      **/
-    virtual CHIP_ERROR Initialize() = 0;
+    virtual CHIP_ERROR Initialize(ECPKeyTarget key_target) = 0;
 
     /**
      * @brief Serialize the keypair.
@@ -395,7 +488,7 @@ public:
      * @brief Initialize the keypair.
      * @return Returns a CHIP_ERROR on error, CHIP_NO_ERROR otherwise
      **/
-    CHIP_ERROR Initialize() override;
+    CHIP_ERROR Initialize(ECPKeyTarget key_target) override;
 
     /**
      * @brief Serialize the keypair.
@@ -429,16 +522,6 @@ public:
     CHIP_ERROR ECDSA_sign_msg(const uint8_t * msg, size_t msg_length, P256ECDSASignature & out_signature) const override;
 
     /**
-     * @brief A function to sign a hash using ECDSA
-     * @param hash Hash that needs to be signed
-     * @param hash_length Length of hash
-     * @param out_signature Buffer that will hold the output signature. The signature consists of: 2 EC elements (r and s),
-     * in raw <r,s> point form (see SEC1).
-     * @return Returns a CHIP_ERROR on error, CHIP_NO_ERROR otherwise
-     **/
-    CHIP_ERROR ECDSA_sign_hash(const uint8_t * hash, size_t hash_length, P256ECDSASignature & out_signature) const override;
-
-    /**
      * @brief A function to derive a shared secret using ECDH
      *
      * This implements the CHIP_Crypto_ECDH(PrivateKey myPrivateKey, PublicKey theirPublicKey) cryptographic primitive
@@ -460,51 +543,58 @@ public:
     /** Release resources associated with this key pair */
     void Clear();
 
-private:
+protected:
     P256PublicKey mPublicKey;
     mutable P256KeypairContext mKeypair;
     bool mInitialized = false;
 };
 
-/**
- *  @brief  A data structure for holding an AES CCM128 symmetric key, without the ownership of it.
- */
-using AesCcm128KeySpan = FixedByteSpan<Crypto::kAES_CCM128_Key_Length>;
+using Aes128KeyByteArray = uint8_t[CHIP_CRYPTO_SYMMETRIC_KEY_LENGTH_BYTES];
 
-class AesCcm128Key
+/**
+ * @brief Platform-specific AES key
+ *
+ * The class represents AES key used by Matter stack either in the form of raw key material or key
+ * reference, depending on the platform. To achieve that, it contains an opaque context that can be
+ * cast to a concrete representation used by the given platform. Note that currently Matter uses
+ * 128-bit symmetric keys only.
+ */
+class Aes128KeyHandle
 {
 public:
-    AesCcm128Key() {}
+    Aes128KeyHandle() = default;
+    ~Aes128KeyHandle() { ClearSecretData(mContext.mOpaque); }
 
-    ~AesCcm128Key()
+    Aes128KeyHandle(const Aes128KeyHandle &) = delete;
+    Aes128KeyHandle(Aes128KeyHandle &&)      = delete;
+    void operator=(const Aes128KeyHandle &) = delete;
+    void operator=(Aes128KeyHandle &&) = delete;
+
+    /**
+     * @brief Get internal context cast to the desired key representation
+     */
+    template <class T>
+    const T & As() const
     {
-        // Sanitize after use
-        ClearSecretData(&bytes[0], Length());
+        return *SafePointerCast<const T *>(&mContext);
     }
 
-    template <size_t N>
-    constexpr AesCcm128Key(const uint8_t (&raw_value)[N])
+    /**
+     * @brief Get internal context cast to the desired, mutable key representation
+     */
+    template <class T>
+    T & AsMutable()
     {
-        static_assert(N == kAES_CCM128_Key_Length, "Can only array-initialize from proper bounds");
-        memcpy(&bytes[0], &raw_value[0], N);
+        return *SafePointerCast<T *>(&mContext);
     }
-
-    template <size_t N>
-    constexpr AesCcm128Key(const FixedByteSpan<N> & value)
-    {
-        static_assert(N == kAES_CCM128_Key_Length, "Can only initialize from proper sized byte span");
-        memcpy(&bytes[0], value.data(), N);
-    }
-
-    size_t Length() const { return sizeof(bytes); }
-    operator uint8_t *() { return bytes; }
-    operator const uint8_t *() const { return bytes; }
-    const uint8_t * ConstBytes() const { return &bytes[0]; }
-    AesCcm128KeySpan Span() const { return AesCcm128KeySpan(bytes); }
-    uint8_t * Bytes() { return &bytes[0]; }
 
 private:
-    uint8_t bytes[kAES_CCM128_Key_Length];
+    static constexpr size_t kContextSize = CHIP_CRYPTO_SYMMETRIC_KEY_LENGTH_BYTES;
+
+    struct alignas(uintptr_t) OpaqueContext
+    {
+        uint8_t mOpaque[kContextSize] = {};
+    } mContext;
 };
 
 /**
@@ -578,7 +668,6 @@ CHIP_ERROR ConvertIntegerRawToDerWithoutTag(const ByteSpan & raw_integer, Mutabl
  * @param aad Additional authentication data
  * @param aad_length Length of additional authentication data
  * @param key Encryption key
- * @param key_length Length of encryption key (in bytes)
  * @param nonce Encryption nonce
  * @param nonce_length Length of encryption nonce
  * @param ciphertext Buffer to write ciphertext into. Caller must ensure this is large enough to hold the ciphertext
@@ -587,7 +676,7 @@ CHIP_ERROR ConvertIntegerRawToDerWithoutTag(const ByteSpan & raw_integer, Mutabl
  * @return Returns a CHIP_ERROR on error, CHIP_NO_ERROR otherwise
  * */
 CHIP_ERROR AES_CCM_encrypt(const uint8_t * plaintext, size_t plaintext_length, const uint8_t * aad, size_t aad_length,
-                           const uint8_t * key, size_t key_length, const uint8_t * nonce, size_t nonce_length, uint8_t * ciphertext,
+                           const Aes128KeyHandle & key, const uint8_t * nonce, size_t nonce_length, uint8_t * ciphertext,
                            uint8_t * tag, size_t tag_length);
 
 /**
@@ -605,16 +694,33 @@ CHIP_ERROR AES_CCM_encrypt(const uint8_t * plaintext, size_t plaintext_length, c
  * @param tag Tag to use to decrypt
  * @param tag_length Length of tag
  * @param key Decryption key
- * @param key_length Length of Decryption key (in bytes)
  * @param nonce Encryption nonce
  * @param nonce_length Length of encryption nonce
  * @param plaintext Buffer to write plaintext into
  * @return Returns a CHIP_ERROR on error, CHIP_NO_ERROR otherwise
  **/
-
 CHIP_ERROR AES_CCM_decrypt(const uint8_t * ciphertext, size_t ciphertext_length, const uint8_t * aad, size_t aad_length,
-                           const uint8_t * tag, size_t tag_length, const uint8_t * key, size_t key_length, const uint8_t * nonce,
+                           const uint8_t * tag, size_t tag_length, const Aes128KeyHandle & key, const uint8_t * nonce,
                            size_t nonce_length, uint8_t * plaintext);
+
+/**
+ * @brief A function that implements AES-CTR encryption/decryption
+ *
+ * This implements the AES-CTR-Encrypt/Decrypt() cryptographic primitives per sections
+ * 3.7.1 and 3.7.2 of the specification. For an empty input, the user of the API
+ * can provide an empty string, or a nullptr, and provide input as 0.
+ * The output buffer can also be an empty string, or a nullptr for this case.
+ *
+ * @param input Input text to encrypt/decrypt
+ * @param input_length Length of ciphertext
+ * @param key Decryption key
+ * @param nonce Encryption nonce
+ * @param nonce_length Length of encryption nonce
+ * @param output Buffer to write output into
+ * @return Returns a CHIP_ERROR on error, CHIP_NO_ERROR otherwise
+ **/
+CHIP_ERROR AES_CTR_crypt(const uint8_t * input, size_t input_length, const Aes128KeyHandle & key, const uint8_t * nonce,
+                         size_t nonce_length, uint8_t * output);
 
 /**
  * @brief Generate a PKCS#10 CSR, usable for Matter, from a P256Keypair.
@@ -638,7 +744,22 @@ CHIP_ERROR AES_CCM_decrypt(const uint8_t * ciphertext, size_t ciphertext_length,
 CHIP_ERROR GenerateCertificateSigningRequest(const P256Keypair * keypair, MutableByteSpan & csr_span);
 
 /**
+ * @brief Common code to validate ASN.1 format/size of a CSR, used by VerifyCertificateSigningRequest.
+ *
+ * Ensures it's not obviously malformed and doesn't have trailing garbage.
+ *
+ * @param csr CSR in DER format
+ * @param csr_length The length of the CSR buffer
+ * @return CHIP_ERROR_UNSUPPORTED_CERT_FORMAT on invalid format, CHIP_NO_ERROR otherwise.
+ */
+CHIP_ERROR VerifyCertificateSigningRequestFormat(const uint8_t * csr, size_t csr_length);
+
+/**
  * @brief Verify the Certificate Signing Request (CSR). If successfully verified, it outputs the public key from the CSR.
+ *
+ * The CSR is valid if the format is correct, the signature validates with the embedded public
+ * key, and there is no trailing garbage data.
+ *
  * @param csr CSR in DER format
  * @param csr_length The length of the CSR
  * @param pubkey The public key from the verified CSR
@@ -1312,7 +1433,7 @@ public:
      *
      * @return CHIP_ERROR     The result of Spake2+ verifier generation
      */
-    CHIP_ERROR Generate(uint32_t pbkdf2IterCount, const ByteSpan & salt, uint32_t & setupPin);
+    CHIP_ERROR Generate(uint32_t pbkdf2IterCount, const ByteSpan & salt, uint32_t setupPin);
 
     /**
      * @brief Compute the initiator values (w0, w1) used for PAKE input.
@@ -1325,8 +1446,7 @@ public:
      *
      * @return CHIP_ERROR     The result from running PBKDF2
      */
-    static CHIP_ERROR ComputeWS(uint32_t pbkdf2IterCount, const ByteSpan & salt, uint32_t & setupPin, uint8_t * ws,
-                                uint32_t ws_len);
+    static CHIP_ERROR ComputeWS(uint32_t pbkdf2IterCount, const ByteSpan & salt, uint32_t setupPin, uint8_t * ws, uint32_t ws_len);
 };
 
 /**
@@ -1371,8 +1491,6 @@ CHIP_ERROR GenerateCompressedFabricId(const Crypto::P256PublicKey & root_public_
 CHIP_ERROR GenerateCompressedFabricId(const Crypto::P256PublicKey & rootPublicKey, uint64_t fabricId,
                                       uint64_t & compressedFabricId);
 
-typedef CapacityBoundBuffer<kMax_x509_Certificate_Length> X509DerCertificate;
-
 enum class CertificateChainValidationResult
 {
     kSuccess = 0,
@@ -1397,21 +1515,30 @@ CHIP_ERROR ValidateCertificateChain(const uint8_t * rootCertificate, size_t root
                                     size_t caCertificateLen, const uint8_t * leafCertificate, size_t leafCertificateLen,
                                     CertificateChainValidationResult & result);
 
+enum class AttestationCertType
+{
+    kPAA = 0,
+    kPAI = 1,
+    kDAC = 2,
+};
+
+CHIP_ERROR VerifyAttestationCertificateFormat(const ByteSpan & cert, AttestationCertType certType);
+
 /**
- * @brief Validate timestamp of a certificate (toBeEvaluatedCertificate) in comparison with other certificate's
- *        (referenceCertificate) issuing timestamp.
+ * @brief Validate notBefore timestamp of a certificate (candidateCertificate) against validity period of the
+ *        issuer certificate (issuerCertificate).
  *
  * Errors are:
- *   - CHIP_ERROR_CERT_EXPIRED if the certificate timestamp does not satisfy the reference certificate's issuing timestamp.
+ *   - CHIP_ERROR_CERT_EXPIRED if the candidateCertificate timestamp does not satisfy the issuerCertificate's timestamp.
  *   - CHIP_ERROR_INVALID_ARGUMENT when passing an invalid argument.
  *   - CHIP_ERROR_INTERNAL on any unexpected crypto or data conversion errors.
  *
- *  @param referenceCertificate     A DER Certificate ByteSpan used as the issuing timestamp reference.
- *  @param toBeEvaluatedCertificate A DER Certificate ByteSpan used to evaluate issuance against the referenceCertificate.
+ *  @param candidateCertificate     A DER Certificate ByteSpan those notBefore timestamp to be evaluated.
+ *  @param issuerCertificate        A DER Certificate ByteSpan used to evaluate validity timestamp of the candidateCertificate.
  *
  *  @returns a CHIP_ERROR (see above) on failure or CHIP_NO_ERROR otherwise.
  **/
-CHIP_ERROR IsCertificateValidAtIssuance(const ByteSpan & referenceCertificate, const ByteSpan & toBeEvaluatedCertificate);
+CHIP_ERROR IsCertificateValidAtIssuance(const ByteSpan & candidateCertificate, const ByteSpan & issuerCertificate);
 
 /**
  * @brief Validate a certificate's validity date against current time.
@@ -1438,6 +1565,29 @@ CHIP_ERROR ExtractSKIDFromX509Cert(const ByteSpan & certificate, MutableByteSpan
  * @brief Extracts the Authority Key Identifier from an X509 Certificate.
  **/
 CHIP_ERROR ExtractAKIDFromX509Cert(const ByteSpan & certificate, MutableByteSpan & akid);
+
+/**
+ * @brief Checks for resigned version of the certificate in the list and returns it.
+ *
+ * The following conditions SHOULD be satisfied for the certificate to qualify as
+ * a resigned version of a reference certificate:
+ *   - SKID of the candidate and the reference certificate should match.
+ *   - SubjectDN of the candidate and the reference certificate should match.
+ *
+ * If no resigned version is found then reference certificate itself is returned.
+ *
+ *  @param referenceCertificate       A DER certificate.
+ *  @param candidateCertificates      A pointer to the list of DER Certificates, which should be searched
+ *                                    for the resigned version of `referenceCertificate`.
+ *  @param candidateCertificatesCount Number of certificates in the `candidateCertificates` list.
+ *  @param outCertificate             A reference to the certificate or it's resigned version if found.
+ *                                    Note that it points to either `referenceCertificate` or one of
+ *                                    `candidateCertificates`, but it doesn't copy data.
+ *
+ *  @returns error if there is certificate parsing/format issue or CHIP_NO_ERROR otherwise.
+ **/
+CHIP_ERROR ReplaceCertIfResignedCertFound(const ByteSpan & referenceCertificate, const ByteSpan * candidateCertificates,
+                                          size_t candidateCertificatesCount, ByteSpan & outCertificate);
 
 /**
  * Defines DN attribute types that can include endocing of VID/PID parameters.
@@ -1482,6 +1632,21 @@ CHIP_ERROR ExtractVIDPIDFromAttributeString(DNAttrType attrType, const ByteSpan 
 CHIP_ERROR ExtractVIDPIDFromX509Cert(const ByteSpan & x509Cert, AttestationCertVidPid & vidpid);
 
 /**
+ * @brief The set of credentials needed to operate group message security with symmetric keys.
+ */
+typedef struct GroupOperationalCredentials
+{
+    /// Validity start time in microseconds since 2000-01-01T00:00:00 UTC ("the Epoch")
+    uint64_t start_time;
+    /// Session Id
+    uint16_t hash;
+    /// Operational group key
+    uint8_t encryption_key[Crypto::CHIP_CRYPTO_SYMMETRIC_KEY_LENGTH_BYTES];
+    /// Privacy key
+    uint8_t privacy_key[Crypto::CHIP_CRYPTO_SYMMETRIC_KEY_LENGTH_BYTES];
+} GroupOperationalCredentials;
+
+/**
  * @brief Opaque context used to protect a symmetric key. The key operations must
  *        be performed without exposing the protected key value.
  */
@@ -1508,7 +1673,7 @@ public:
      * for ciphertext, and plaintext.
      * @return CHIP_ERROR
      */
-    virtual CHIP_ERROR EncryptMessage(const ByteSpan & plaintext, const ByteSpan & aad, const ByteSpan & nonce,
+    virtual CHIP_ERROR MessageEncrypt(const ByteSpan & plaintext, const ByteSpan & aad, const ByteSpan & nonce,
                                       MutableByteSpan & mic, MutableByteSpan & ciphertext) const = 0;
     /**
      * @brief Perform the message decryption as described in 4.7.3.(Security Processing of Incoming Messages)
@@ -1520,30 +1685,26 @@ public:
      * for plaintext, and ciphertext.
      * @return CHIP_ERROR
      */
-    virtual CHIP_ERROR DecryptMessage(const ByteSpan & ciphertext, const ByteSpan & aad, const ByteSpan & nonce,
+    virtual CHIP_ERROR MessageDecrypt(const ByteSpan & ciphertext, const ByteSpan & aad, const ByteSpan & nonce,
                                       const ByteSpan & mic, MutableByteSpan & plaintext) const = 0;
 
     /**
      * @brief Perform privacy encoding as described in 4.8.2. (Privacy Processing of Outgoing Messages)
-     * @param[in,out] header    Message header to encrypt
-     * @param[in] session_id    Outgoing SessionID
-     * @param[in] payload       Encrypted payload
-     * @param[in] mic       Outgoing Message Integrity Check
+     * @param[in] input         Message header to privacy encrypt
+     * @param[in] nonce         Privacy Nonce = session_id | mic
+     * @param[out] output       Message header obfuscated
      * @return CHIP_ERROR
      */
-    virtual CHIP_ERROR EncryptPrivacy(MutableByteSpan & header, uint16_t session_id, const ByteSpan & payload,
-                                      const ByteSpan & mic) const = 0;
+    virtual CHIP_ERROR PrivacyEncrypt(const ByteSpan & input, const ByteSpan & nonce, MutableByteSpan & output) const = 0;
 
     /**
      * @brief Perform privacy decoding as described in 4.8.3. (Privacy Processing of Incoming Messages)
-     * @param[in,out] header    Message header to decrypt
-     * @param[in] session_id    Incoming SessionID
-     * @param[in] payload       Encrypted payload
-     * @param[in] mic           Outgoing Message Integrity Check
+     * @param[in] input         Message header to privacy decrypt
+     * @param[in] nonce         Privacy Nonce = session_id | mic
+     * @param[out] output       Message header deobfuscated
      * @return CHIP_ERROR
      */
-    virtual CHIP_ERROR DecryptPrivacy(MutableByteSpan & header, uint16_t session_id, const ByteSpan & payload,
-                                      const ByteSpan & mic) const = 0;
+    virtual CHIP_ERROR PrivacyDecrypt(const ByteSpan & input, const ByteSpan & nonce, MutableByteSpan & output) const = 0;
 
     /**
      * @brief Release resources such as dynamic memory used to allocate this instance of the SymmetricKeyContext
@@ -1554,6 +1715,7 @@ public:
 /**
  *  @brief Derives the Operational Group Key using the Key Derivation Function (KDF) from the given epoch key.
  * @param[in] epoch_key  The epoch key. Must be CHIP_CRYPTO_SYMMETRIC_KEY_LENGTH_BYTES bytes length.
+ * @param[in] compressed_fabric_id The compressed fabric ID for the fabric (big endian byte string)
  * @param[out] out_key  Symmetric key used as the encryption key during message processing for group communication.
  The buffer size must be at least CHIP_CRYPTO_SYMMETRIC_KEY_LENGTH_BYTES bytes length.
  * @return Returns a CHIP_NO_ERROR on succcess, or CHIP_ERROR_INTERNAL if the provided key is invalid.
@@ -1569,5 +1731,26 @@ CHIP_ERROR DeriveGroupOperationalKey(const ByteSpan & epoch_key, const ByteSpan 
  **/
 CHIP_ERROR DeriveGroupSessionId(const ByteSpan & operational_key, uint16_t & session_id);
 
+/**
+ *  @brief Derives the Privacy Group Key using the Key Derivation Function (KDF) from the given epoch key.
+ * @param[in] epoch_key  The epoch key. Must be CHIP_CRYPTO_SYMMETRIC_KEY_LENGTH_BYTES bytes length.
+ * @param[out] out_key  Symmetric key used as the privacy key during message processing for group communication.
+ *                      The buffer size must be at least CHIP_CRYPTO_SYMMETRIC_KEY_LENGTH_BYTES bytes length.
+ * @return Returns a CHIP_NO_ERROR on succcess, or CHIP_ERROR_INTERNAL if the provided key is invalid.
+ **/
+CHIP_ERROR DeriveGroupPrivacyKey(const ByteSpan & epoch_key, MutableByteSpan & out_key);
+
+/**
+ *  @brief Derives the complete set of credentials needed for group security.
+ *
+ * This function will derive the Encryption Key, Group Key Hash (Session Id), and Privacy Key
+ * for the given Epoch Key and Compressed Fabric Id.
+ * @param[in] epoch_key  The epoch key. Must be CHIP_CRYPTO_SYMMETRIC_KEY_LENGTH_BYTES bytes length.
+ * @param[in] compressed_fabric_id The compressed fabric ID for the fabric (big endian byte string)
+ * @param[out] operational_credentials The set of Symmetric keys used during message processing for group communication.
+ * @return Returns a CHIP_NO_ERROR on succcess, or CHIP_ERROR_INTERNAL if the provided key is invalid.
+ **/
+CHIP_ERROR DeriveGroupOperationalCredentials(const ByteSpan & epoch_key, const ByteSpan & compressed_fabric_id,
+                                             GroupOperationalCredentials & operational_credentials);
 } // namespace Crypto
 } // namespace chip

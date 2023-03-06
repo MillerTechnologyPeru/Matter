@@ -23,6 +23,7 @@
 #include <app/util/af.h>
 #include <app/util/attribute-storage.h>
 #include <app/util/basic-types.h>
+#include <protocols/interaction_model/StatusCode.h>
 
 namespace chip {
 namespace app {
@@ -66,17 +67,18 @@ public:
      * @param endpointId
      * @return The mode options provider for the endpoint.
      */
-    virtual const ModeOptionsProvider getModeOptionsProvider(EndpointId endpointId) const = 0;
+    virtual ModeOptionsProvider getModeOptionsProvider(EndpointId endpointId) const = 0;
 
     /**
      * Given the endpointId and a mode value, find the ModeOptionStruct that matches the mode.
      * @param endpointId The endpoint for which to search the ModeOptionStruct.
      * @param mode The mode for which to search the ModeOptionStruct.
      * @param dataPtr The pointer to receive the ModeOptionStruct, if one is found.
-     * @return EMBER_ZCL_STATUS_SUCCESS if successfully found the option. Otherwise, returns appropriate status code (found in
+     * @return Status::Success if successfully found the option. Otherwise, returns appropriate status code (found in
      * <app/util/af-enums.h>)
      */
-    virtual EmberAfStatus getModeOptionByMode(EndpointId endpointId, uint8_t mode, const ModeOptionStructType ** dataPtr) const = 0;
+    virtual Protocols::InteractionModel::Status getModeOptionByMode(EndpointId endpointId, uint8_t mode,
+                                                                    const ModeOptionStructType ** dataPtr) const = 0;
 
     virtual ~SupportedModesManager() {}
 };

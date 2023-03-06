@@ -36,12 +36,14 @@ constexpr uint32_t kDeviceDiscoveredTimeout = CHIP_CONFIG_SETUP_CODE_PAIRER_DISC
 namespace chip {
 namespace Controller {
 
-CHIP_ERROR SetUpCodePairer::PairDevice(NodeId remoteId, const char * setUpCode, SetupCodePairerBehaviour commission)
+CHIP_ERROR SetUpCodePairer::PairDevice(NodeId remoteId, const char * setUpCode, SetupCodePairerBehaviour commission,
+                                       DiscoveryType discoveryType)
 {
     VerifyOrReturnError(mSystemLayer != nullptr, CHIP_ERROR_INCORRECT_STATE);
 
     SetupPayload payload;
     mConnectionType = commission;
+    mDiscoveryType  = discoveryType;
 
     bool isQRCode = strncmp(setUpCode, kQRCodePrefix, strlen(kQRCodePrefix)) == 0;
     if (isQRCode)
@@ -71,23 +73,27 @@ CHIP_ERROR SetUpCodePairer::Connect(SetupPayload & payload)
     CHIP_ERROR err = CHIP_NO_ERROR;
     bool isRunning = false;
 
-    bool searchOverAll = payload.rendezvousInformation == RendezvousInformationFlag::kNone;
-    if (searchOverAll || payload.rendezvousInformation == RendezvousInformationFlag::kBLE)
-    {
-        if (CHIP_NO_ERROR == (err = StartDiscoverOverBle(payload)))
-        {
-            isRunning = true;
-        }
-        VerifyOrReturnError(searchOverAll || CHIP_NO_ERROR == err, err);
-    }
+    bool searchOverAll = !payload.rendezvousInformation.HasValue();
 
-    if (searchOverAll || payload.rendezvousInformation == RendezvousInformationFlag::kSoftAP)
+    if (mDiscoveryType == DiscoveryType::kAll)
     {
-        if (CHIP_NO_ERROR == (err = StartDiscoverOverSoftAP(payload)))
+        if (searchOverAll || payload.rendezvousInformation.Value().Has(RendezvousInformationFlag::kBLE))
         {
-            isRunning = true;
+            if (CHIP_NO_ERROR == (err = StartDiscoverOverBle(payload)))
+            {
+                isRunning = true;
+            }
+            VerifyOrReturnError(searchOverAll || CHIP_NO_ERROR == err || CHIP_ERROR_UNSUPPORTED_CHIP_FEATURE == err, err);
         }
-        VerifyOrReturnError(searchOverAll || CHIP_NO_ERROR == err, err);
+
+        if (searchOverAll || payload.rendezvousInformation.Value().Has(RendezvousInformationFlag::kSoftAP))
+        {
+            if (CHIP_NO_ERROR == (err = StartDiscoverOverSoftAP(payload)))
+            {
+                isRunning = true;
+            }
+            VerifyOrReturnError(searchOverAll || CHIP_NO_ERROR == err || CHIP_ERROR_UNSUPPORTED_CHIP_FEATURE == err, err);
+        }
     }
 
     // We always want to search on network because any node that has already been commissioned will use on-network regardless of the
@@ -154,13 +160,23 @@ CHIP_ERROR SetUpCodePairer::StartDiscoverOverIP(SetupPayload & payload)
 {
     ChipLogProgress(Controller, "Starting commissioning discovery over DNS-SD");
 
-    currentFilter.type = payload.isShortDiscriminator ? Dnssd::DiscoveryFilterType::kShortDiscriminator
-                                                      : Dnssd::DiscoveryFilterType::kLongDiscriminator;
-    currentFilter.code =
-        payload.isShortDiscriminator ? static_cast<uint16_t>((payload.discriminator >> 8) & 0x0F) : payload.discriminator;
+    auto & discriminator = payload.discriminator;
+    if (discriminator.IsShortDiscriminator())
+    {
+        mCurrentFilter.type = Dnssd::DiscoveryFilterType::kShortDiscriminator;
+        mCurrentFilter.code = discriminator.GetShortValue();
+    }
+    else
+    {
+        mCurrentFilter.type = Dnssd::DiscoveryFilterType::kLongDiscriminator;
+        mCurrentFilter.code = discriminator.GetLongValue();
+    }
+    mPayloadVendorID  = payload.vendorID;
+    mPayloadProductID = payload.productID;
+
     // Handle possibly-sync callbacks.
     mWaitingForDiscovery[kIPTransport] = true;
-    CHIP_ERROR err                     = mCommissioner->DiscoverCommissionableNodes(currentFilter);
+    CHIP_ERROR err                     = mCommissioner->DiscoverCommissionableNodes(mCurrentFilter);
     if (err != CHIP_NO_ERROR)
     {
         mWaitingForDiscovery[kIPTransport] = false;
@@ -173,7 +189,11 @@ CHIP_ERROR SetUpCodePairer::StopConnectOverIP()
     ChipLogDetail(Controller, "Stopping commissioning discovery over DNS-SD");
 
     mWaitingForDiscovery[kIPTransport] = false;
-    currentFilter.type                 = Dnssd::DiscoveryFilterType::kNone;
+    mCurrentFilter.type                = Dnssd::DiscoveryFilterType::kNone;
+    mPayloadVendorID                   = kNotAvailable;
+    mPayloadProductID                  = kNotAvailable;
+
+    mCommissioner->StopCommissionableDiscovery();
     return CHIP_NO_ERROR;
 }
 
@@ -203,8 +223,8 @@ bool SetUpCodePairer::ConnectToDiscoveredDevice()
         // Remove it from the queue before we try to connect, in case the
         // connection attempt fails and calls right back into us to try the next
         // thing.
-        RendezvousParameters params(mDiscoveredParameters.front());
-        mDiscoveredParameters.pop();
+        SetUpCodePairerParameters params(mDiscoveredParameters.front());
+        mDiscoveredParameters.pop_front();
 
         params.SetSetupPINCode(mSetUpPINCode);
 
@@ -216,6 +236,11 @@ bool SetUpCodePairer::ConnectToDiscoveredDevice()
 
         // Handle possibly-sync call backs from attempts to establish PASE.
         ExpectPASEEstablishment();
+
+        if (params.GetPeerAddress().GetTransportType() == Transport::Type::kUdp)
+        {
+            mCurrentPASEParameters.SetValue(params);
+        }
 
         CHIP_ERROR err;
         if (mConnectionType == SetupCodePairerBehaviour::kCommission)
@@ -247,9 +272,13 @@ void SetUpCodePairer::OnDiscoveredDeviceOverBle(BLE_CONNECTION_OBJECT connObj)
 
     mWaitingForDiscovery[kBLETransport] = false;
 
-    Transport::PeerAddress peerAddress = Transport::PeerAddress::BLE();
-    mDiscoveredParameters.emplace();
-    mDiscoveredParameters.back().SetPeerAddress(peerAddress).SetConnectionObject(connObj);
+    // In order to not wait for all the possible addresses discovered over mdns to
+    // be tried before trying to connect over BLE, the discovered connection object is
+    // inserted at the beginning of the list.
+    //
+    // It makes it the 'next' thing to try to connect to if there are already some
+    // discovered parameters in the list.
+    mDiscoveredParameters.emplace_front(connObj);
     ConnectToDiscoveredDevice();
 }
 
@@ -271,6 +300,11 @@ void SetUpCodePairer::OnBLEDiscoveryError(CHIP_ERROR err)
 }
 #endif // CONFIG_NETWORK_LAYER_BLE
 
+bool SetUpCodePairer::IdIsPresent(uint16_t vendorOrProductID)
+{
+    return vendorOrProductID != kNotAvailable;
+}
+
 bool SetUpCodePairer::NodeMatchesCurrentFilter(const Dnssd::DiscoveredNodeData & nodeData) const
 {
     if (nodeData.commissionData.commissioningMode == 0)
@@ -278,12 +312,26 @@ bool SetUpCodePairer::NodeMatchesCurrentFilter(const Dnssd::DiscoveredNodeData &
         return false;
     }
 
-    switch (currentFilter.type)
+    // The advertisement may not include a vendor id.
+    if (IdIsPresent(mPayloadVendorID) && IdIsPresent(nodeData.commissionData.vendorId) &&
+        mPayloadVendorID != nodeData.commissionData.vendorId)
+    {
+        return false;
+    }
+
+    // The advertisement may not include a product id.
+    if (IdIsPresent(mPayloadProductID) && IdIsPresent(nodeData.commissionData.productId) &&
+        mPayloadProductID != nodeData.commissionData.productId)
+    {
+        return false;
+    }
+
+    switch (mCurrentFilter.type)
     {
     case Dnssd::DiscoveryFilterType::kShortDiscriminator:
-        return ((nodeData.commissionData.longDiscriminator >> 8) & 0x0F) == currentFilter.code;
+        return ((nodeData.commissionData.longDiscriminator >> 8) & 0x0F) == mCurrentFilter.code;
     case Dnssd::DiscoveryFilterType::kLongDiscriminator:
-        return nodeData.commissionData.longDiscriminator == currentFilter.code;
+        return nodeData.commissionData.longDiscriminator == mCurrentFilter.code;
     default:
         return false;
     }
@@ -299,13 +347,29 @@ void SetUpCodePairer::NotifyCommissionableDeviceDiscovered(const Dnssd::Discover
 
     ChipLogProgress(Controller, "Discovered device to be commissioned over DNS-SD");
 
-    Inet::InterfaceId interfaceId =
-        nodeData.resolutionData.ipAddress[0].IsIPv6LinkLocal() ? nodeData.resolutionData.interfaceId : Inet::InterfaceId::Null();
-    Transport::PeerAddress peerAddress =
-        Transport::PeerAddress::UDP(nodeData.resolutionData.ipAddress[0], nodeData.resolutionData.port, interfaceId);
-    mDiscoveredParameters.emplace();
-    mDiscoveredParameters.back().SetPeerAddress(peerAddress);
+    auto & resolutionData = nodeData.resolutionData;
+
+    if (mDiscoveryType == DiscoveryType::kDiscoveryNetworkOnlyWithoutPASEAutoRetry)
+    {
+        // If the discovery type does not want the PASE auto retry mechanism, we will just store
+        // a single IP. So the discovery process is stopped as it won't be of any help anymore.
+        StopConnectOverIP();
+        mDiscoveredParameters.emplace_back(nodeData.resolutionData, 0);
+    }
+    else
+    {
+        for (size_t i = 0; i < resolutionData.numIPs; i++)
+        {
+            mDiscoveredParameters.emplace_back(nodeData.resolutionData, i);
+        }
+    }
+
     ConnectToDiscoveredDevice();
+}
+
+void SetUpCodePairer::CommissionerShuttingDown()
+{
+    ResetDiscoveryState();
 }
 
 bool SetUpCodePairer::TryNextRendezvousParameters()
@@ -352,9 +416,10 @@ void SetUpCodePairer::ResetDiscoveryState()
 
     while (!mDiscoveredParameters.empty())
     {
-        mDiscoveredParameters.pop();
+        mDiscoveredParameters.pop_front();
     }
 
+    mCurrentPASEParameters.ClearValue();
     mLastPASEError = CHIP_NO_ERROR;
 }
 
@@ -424,9 +489,28 @@ void SetUpCodePairer::OnPairingComplete(CHIP_ERROR error)
         mSystemLayer->CancelTimer(OnDeviceDiscoveredTimeoutCallback, this);
 
         ResetDiscoveryState();
-        pairingDelegate->OnPairingComplete(error);
+        if (pairingDelegate != nullptr)
+        {
+            pairingDelegate->OnPairingComplete(error);
+        }
         return;
     }
+
+    // It may happen that there is a stale DNS entry. If so, ReconfirmRecord will flush
+    // the record from the daemon cache once it determines that it is invalid.
+    // It may not help for this particular resolve, but may help subsequent resolves.
+    if (CHIP_ERROR_TIMEOUT == error && mCurrentPASEParameters.HasValue())
+    {
+        const auto & params = mCurrentPASEParameters.Value();
+        const auto & peer   = params.GetPeerAddress();
+        const auto & ip     = peer.GetIPAddress();
+        auto err            = Dnssd::Resolver::Instance().ReconfirmRecord(params.mHostName, ip, params.mInterfaceId);
+        if (CHIP_NO_ERROR != err && CHIP_ERROR_NOT_IMPLEMENTED != err)
+        {
+            ChipLogError(Controller, "Error when verifying the validity of an address: %" CHIP_ERROR_FORMAT, err.Format());
+        }
+    }
+    mCurrentPASEParameters.ClearValue();
 
     // We failed to establish PASE.  Try the next thing we have discovered, if
     // any.
@@ -437,7 +521,10 @@ void SetUpCodePairer::OnPairingComplete(CHIP_ERROR error)
         return;
     }
 
-    pairingDelegate->OnPairingComplete(error);
+    if (pairingDelegate != nullptr)
+    {
+        pairingDelegate->OnPairingComplete(error);
+    }
 }
 
 void SetUpCodePairer::OnPairingDeleted(CHIP_ERROR error)
@@ -477,6 +564,33 @@ void SetUpCodePairer::OnDeviceDiscoveredTimeoutCallback(System::Layer * layer, v
         pairer->mCommissioner->OnSessionEstablishmentError(err);
     }
 }
+
+SetUpCodePairerParameters::SetUpCodePairerParameters(const Dnssd::CommonResolutionData & data, size_t index)
+{
+    mInterfaceId = data.interfaceId;
+    Platform::CopyString(mHostName, data.hostName);
+
+    auto & ip = data.ipAddress[index];
+    SetPeerAddress(Transport::PeerAddress::UDP(ip, data.port, ip.IsIPv6LinkLocal() ? data.interfaceId : Inet::InterfaceId::Null()));
+
+    if (data.mrpRetryIntervalIdle.HasValue())
+    {
+        SetIdleInterval(data.mrpRetryIntervalIdle.Value());
+    }
+
+    if (data.mrpRetryIntervalActive.HasValue())
+    {
+        SetActiveInterval(data.mrpRetryIntervalActive.Value());
+    }
+}
+
+#if CONFIG_NETWORK_LAYER_BLE
+SetUpCodePairerParameters::SetUpCodePairerParameters(BLE_CONNECTION_OBJECT connObj)
+{
+    Transport::PeerAddress peerAddress = Transport::PeerAddress::BLE();
+    SetPeerAddress(peerAddress).SetConnectionObject(connObj);
+}
+#endif // CONFIG_NETWORK_LAYER_BLE
 
 } // namespace Controller
 } // namespace chip

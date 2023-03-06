@@ -242,8 +242,8 @@ bool FormatCHIPError(char * buf, uint16_t bufSize, CHIP_ERROR err)
     case CHIP_ERROR_LISTENER_ALREADY_STOPPED.AsInteger():
         desc = "Listener already stopped";
         break;
-    case CHIP_ERROR_UNKNOWN_TOPIC.AsInteger():
-        desc = "Unknown Topic";
+    case CHIP_ERROR_INVALID_SUBSCRIPTION.AsInteger():
+        desc = "Invalid Subscription Id";
         break;
     case CHIP_ERROR_TIMEOUT.AsInteger():
         desc = "Timeout";
@@ -437,6 +437,9 @@ bool FormatCHIPError(char * buf, uint16_t bufSize, CHIP_ERROR err)
     case CHIP_ERROR_DRBG_ENTROPY_SOURCE_FAILED.AsInteger():
         desc = "DRBG entropy source failed to generate entropy data";
         break;
+    case CHIP_ERROR_MESSAGE_COUNTER_EXHAUSTED.AsInteger():
+        desc = "Message counter exhausted";
+        break;
     case CHIP_ERROR_FABRIC_EXISTS.AsInteger():
         desc = "Trying to add a NOC for a fabric that already exists";
         break;
@@ -542,8 +545,8 @@ bool FormatCHIPError(char * buf, uint16_t bufSize, CHIP_ERROR err)
     case CHIP_ERROR_PERSISTED_STORAGE_VALUE_NOT_FOUND.AsInteger():
         desc = "Value not found in the persisted storage";
         break;
-    case CHIP_ERROR_PROFILE_STRING_CONTEXT_ALREADY_REGISTERED.AsInteger():
-        desc = "String context already registered";
+    case CHIP_ERROR_IM_FABRIC_DELETED.AsInteger():
+        desc = "The fabric is deleted, and the corresponding IM resources are released";
         break;
     case CHIP_ERROR_PROFILE_STRING_CONTEXT_NOT_REGISTERED.AsInteger():
         desc = "String context not registered";
@@ -727,6 +730,9 @@ bool FormatCHIPError(char * buf, uint16_t bufSize, CHIP_ERROR err)
         break;
     case CHIP_ERROR_MISSING_URI_SEPARATOR.AsInteger():
         desc = "The URI separator is missing";
+        break;
+    case CHIP_ERROR_HANDLER_NOT_SET.AsInteger():
+        desc = "Callback function or callable object is not set";
         break;
     }
 #endif // !CHIP_CONFIG_SHORT_ERROR_STR

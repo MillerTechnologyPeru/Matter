@@ -134,25 +134,11 @@ enum PublicEventTypes
     kServiceConnectivityChange,
 
     /**
-     * Fabric Membership Change
-     *
-     * Signals a change in the device's membership in a chip fabric.
-     */
-    kFabricMembershipChange,
-
-    /**
      * Service Provisioning Change
      *
      * Signals a change to the device's service provisioning state.
      */
     kServiceProvisioningChange,
-
-    /**
-     * Account Pairing Change
-     *
-     * Signals a change to the device's state with respect to being paired to a user account.
-     */
-    kAccountPairingChange,
 
     /**
      * Time Sync Change
@@ -167,13 +153,6 @@ enum PublicEventTypes
      * Signals a change to the sleepy end device interval.
      */
     kSEDIntervalChange,
-
-    /**
-     * Security Session Established
-     *
-     * Signals that an external entity has established a new security session with the device.
-     */
-    kSessionEstablished,
 
     /**
      * CHIPoBLE Connection Established
@@ -233,9 +212,14 @@ enum PublicEventTypes
     kOperationalNetworkEnabled,
 
     /**
-     * Signals that DNS-SD platform layer was initialized and is ready to operate.
+     * Signals that DNS-SD has been initialized and is ready to operate.
      */
-    kDnssdPlatformInitialized,
+    kDnssdInitialized,
+
+    /**
+     * Signals that DNS-SD backend was restarted and services must be published again.
+     */
+    kDnssdRestartNeeded,
 
     /**
      * Signals that bindings were updated.
@@ -246,6 +230,15 @@ enum PublicEventTypes
      * Signals that the state of the OTA engine changed.
      */
     kOtaStateChanged,
+
+    /**
+     * Server initialization has completed.
+     *
+     * Signals that all server components have been initialized and the node is ready to establish
+     * connections with other nodes. This event can be used to trigger on-boot actions that require
+     * sending messages to other nodes.
+     */
+    kServerReady,
 };
 
 /**
@@ -308,6 +301,34 @@ enum ActivityChange
 enum OtaState
 {
     kOtaSpaceAvailable = 0,
+    /**
+     * This state indicates that Node is currently downloading a software update.
+     */
+    kOtaDownloadInProgress,
+    /**
+     * This state indicates that Node has successfully downloaded a software update.
+     */
+    kOtaDownloadComplete,
+    /**
+     * This state indicates that Node has failed to download a software update.
+     */
+    kOtaDownloadFailed,
+    /**
+     * This state indicates that Node has aborted the download of a software update.
+     */
+    kOtaDownloadAborted,
+    /**
+     * This state indicate that Node is currently in the process of verifying and applying a software update.
+     */
+    kOtaApplyInProgress,
+    /**
+     * This state indicates that Node has successfully applied a software update.
+     */
+    kOtaApplyComplete,
+    /**
+     * This state indicates that Node has failed to apply a software update.
+     */
+    kOtaApplyFailed,
 };
 
 inline ConnectivityChange GetConnectivityChange(bool prevState, bool newState)
@@ -473,6 +494,10 @@ struct ChipDeviceEvent final
             uint64_t nodeId;
             FabricIndex fabricIndex;
         } CommissioningComplete;
+        struct
+        {
+            FabricIndex fabricIndex;
+        } BindingsChanged;
 
         struct
         {

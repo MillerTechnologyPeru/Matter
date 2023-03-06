@@ -22,8 +22,8 @@
  *    @file
  *      Implementation of the fault-injection utilities for CHIP System Layer.
  */
-#if CHIP_SYSTEM_CONFIG_TEST
 /* module header, also carries config, comes first */
+#if CHIP_SYSTEM_CONFIG_TEST
 #include <system/SystemFaultInjection.h>
 
 #include <nlassert.h>

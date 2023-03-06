@@ -79,12 +79,26 @@ struct Nullable : protected Optional<T>
         return true;
     }
 
-    // The only fabric-scoped objects in the spec are events and structs inside lists, and neither one can be nullable.
+    // The only fabric-scoped objects in the spec are commands, events and structs inside lists, and none of those can be nullable.
     static constexpr bool kIsFabricScoped = false;
 
     bool operator==(const Nullable & other) const { return Optional<T>::operator==(other); }
-    bool operator!=(const Nullable & other) const { return !(*this == other); }
+    bool operator!=(const Nullable & other) const { return Optional<T>::operator!=(other); }
+    bool operator==(const T & other) const { return Optional<T>::operator==(other); }
+    bool operator!=(const T & other) const { return Optional<T>::operator!=(other); }
 };
+
+template <class T>
+constexpr Nullable<std::decay_t<T>> MakeNullable(T && value)
+{
+    return Nullable<std::decay_t<T>>(InPlace, std::forward<T>(value));
+}
+
+template <class T, class... Args>
+constexpr Nullable<T> MakeNullable(Args &&... args)
+{
+    return Nullable<T>(InPlace, std::forward<Args>(args)...);
+}
 
 } // namespace DataModel
 } // namespace app

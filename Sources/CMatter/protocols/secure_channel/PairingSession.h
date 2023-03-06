@@ -26,7 +26,7 @@
 #pragma once
 
 #include <lib/core/CHIPError.h>
-#include <lib/core/CHIPTLV.h>
+#include <lib/core/TLV.h>
 #include <messaging/ExchangeContext.h>
 #include <protocols/secure_channel/Constants.h>
 #include <protocols/secure_channel/SessionEstablishmentDelegate.h>
@@ -51,6 +51,7 @@ public:
 
     // Implement SessionDelegate
     NewSessionHandlingPolicy GetNewSessionHandlingPolicy() override { return NewSessionHandlingPolicy::kStayAtOldSession; }
+    void OnSessionReleased() override;
 
     Optional<uint16_t> GetLocalSessionId() const
     {
@@ -63,11 +64,27 @@ public:
         return localSessionId;
     }
 
+    /**
+     * Copy the underlying session (if present) into a SessionHandle that a caller can use to
+     * obtain a reference to the session.
+     */
+    Optional<SessionHandle> CopySecureSession()
+    {
+        if (mSecureSessionHolder)
+        {
+            VerifyOrDie(mSecureSessionHolder->GetSessionType() == Transport::Session::SessionType::kSecure);
+            return MakeOptional<SessionHandle>(*mSecureSessionHolder->AsSecureSession());
+        }
+
+        return Optional<SessionHandle>::Missing();
+    }
+
     uint16_t GetPeerSessionId() const
     {
         VerifyOrDie(mPeerSessionId.HasValue());
         return mPeerSessionId.Value();
     }
+
     bool IsValidPeerSessionId() const { return mPeerSessionId.HasValue(); }
 
     /**
@@ -85,7 +102,7 @@ public:
     /**
      * Encode the provided MRP parameters using the provided TLV tag.
      */
-    static CHIP_ERROR EncodeMRPParameters(TLV::Tag tag, const ReliableMessageProtocolConfig & mrpConfig,
+    static CHIP_ERROR EncodeMRPParameters(TLV::Tag tag, const ReliableMessageProtocolConfig & mrpLocalConfig,
                                           TLV::TLVWriter & tlvWriter);
 
 protected:
@@ -93,10 +110,14 @@ protected:
      * Allocate a secure session object from the passed session manager for the
      * pending session establishment operation.
      *
-     * @param sessionManager session manager from which to allocate a secure session object
+     * @param sessionManager        Session manager from which to allocate a secure session object
+     * @param sessionEvictionHint   If we're either establishing or just finished establishing a session to a peer in either
+     * initiator or responder roles, the node id of that peer should be provided in this argument. Else, it should be initialized to
+     * a default-constructed ScopedNodeId().
+     *
      * @return CHIP_ERROR The outcome of the allocation attempt
      */
-    CHIP_ERROR AllocateSecureSession(SessionManager & sessionManager);
+    CHIP_ERROR AllocateSecureSession(SessionManager & sessionManager, const ScopedNodeId & sessionEvictionHint = ScopedNodeId());
 
     CHIP_ERROR ActivateSecureSession(const Transport::PeerAddress & peerAddress);
 
@@ -116,14 +137,16 @@ protected:
         Protocols::SecureChannel::GeneralStatusCode generalCode = (protocolCode == Protocols::SecureChannel::kProtocolCodeSuccess)
             ? Protocols::SecureChannel::GeneralStatusCode::kSuccess
             : Protocols::SecureChannel::GeneralStatusCode::kFailure;
-        uint32_t protocolId = Protocols::SecureChannel::Id.ToFullyQualifiedSpecForm();
 
         ChipLogDetail(SecureChannel, "Sending status report. Protocol code %d, exchange %d", protocolCode,
                       exchangeCtxt->GetExchangeId());
 
-        Protocols::SecureChannel::StatusReport statusReport(generalCode, protocolId, protocolCode);
+        Protocols::SecureChannel::StatusReport statusReport(generalCode, Protocols::SecureChannel::Id, protocolCode);
 
-        Encoding::LittleEndian::PacketBufferWriter bbuf(System::PacketBufferHandle::New(statusReport.Size()));
+        auto handle = System::PacketBufferHandle::New(statusReport.Size());
+        VerifyOrReturn(!handle.IsNull(), ChipLogError(SecureChannel, "Failed to allocate status report message"));
+        Encoding::LittleEndian::PacketBufferWriter bbuf(std::move(handle));
+
         statusReport.WriteToBuffer(bbuf);
 
         System::PacketBufferHandle msg = bbuf.Finalize();
@@ -132,7 +155,7 @@ protected:
         CHIP_ERROR err = exchangeCtxt->SendMessage(Protocols::SecureChannel::MsgType::StatusReport, std::move(msg));
         if (err != CHIP_NO_ERROR)
         {
-            ChipLogError(SecureChannel, "Failed to send status report message. %s", ErrorStr(err));
+            ChipLogError(SecureChannel, "Failed to send status report message: %" CHIP_ERROR_FORMAT, err.Format());
         }
     }
 
@@ -141,8 +164,7 @@ protected:
         Protocols::SecureChannel::StatusReport report;
         CHIP_ERROR err = report.Parse(std::move(msg));
         ReturnErrorOnFailure(err);
-        VerifyOrReturnError(report.GetProtocolId() == Protocols::SecureChannel::Id.ToFullyQualifiedSpecForm(),
-                            CHIP_ERROR_INVALID_ARGUMENT);
+        VerifyOrReturnError(report.GetProtocolId() == Protocols::SecureChannel::Id, CHIP_ERROR_INVALID_ARGUMENT);
 
         if (report.GetGeneralCode() == Protocols::SecureChannel::GeneralStatusCode::kSuccess &&
             report.GetProtocolCode() == Protocols::SecureChannel::kProtocolCodeSuccess && successExpected)
@@ -169,8 +191,16 @@ protected:
      */
     CHIP_ERROR DecodeMRPParametersIfPresent(TLV::Tag expectedTag, TLV::ContiguousBufferTLVReader & tlvReader);
 
+    bool IsSessionEstablishmentInProgress();
+
     // TODO: remove Clear, we should create a new instance instead reset the old instance.
     void Clear();
+
+    /**
+     * Notify our delegate about a session establishment error, if we have not
+     * notified it of an error or success before.
+     */
+    void NotifySessionEstablishmentError(CHIP_ERROR error);
 
 protected:
     CryptoContext::SessionRole mRole;
@@ -184,7 +214,7 @@ protected:
     // mLocalMRPConfig is our config which is sent to the other end and used by the peer session.
     // mRemoteMRPConfig is received from other end and set to our session.
     Optional<ReliableMessageProtocolConfig> mLocalMRPConfig;
-    ReliableMessageProtocolConfig mRemoteMRPConfig = GetLocalMRPConfig();
+    ReliableMessageProtocolConfig mRemoteMRPConfig = GetDefaultMRPConfig();
 
 private:
     Optional<uint16_t> mPeerSessionId;

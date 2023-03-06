@@ -46,6 +46,11 @@
 #define SOCK_CLOEXEC 0
 #endif
 
+// On MbedOS, INADDR_ANY does not seem to exist...
+#ifndef INADDR_ANY
+#define INADDR_ANY 0
+#endif
+
 #if CHIP_SYSTEM_CONFIG_USE_ZEPHYR_SOCKET_EXTENSIONS
 #include "ZephyrSocket.h"
 #endif // CHIP_SYSTEM_CONFIG_USE_ZEPHYR_SOCKET_EXTENSIONS
@@ -61,7 +66,7 @@
 #define INET_IPV6_ADD_MEMBERSHIP IPV6_ADD_MEMBERSHIP
 #elif defined(IPV6_JOIN_GROUP)
 #define INET_IPV6_ADD_MEMBERSHIP IPV6_JOIN_GROUP
-#elif !__ZEPHYR__
+#elif !CHIP_SYSTEM_CONFIG_USE_PLATFORM_MULTICAST_API
 #error                                                                                                                             \
     "Neither IPV6_ADD_MEMBERSHIP nor IPV6_JOIN_GROUP are defined which are required for generalized IPv6 multicast group support."
 #endif // IPV6_ADD_MEMBERSHIP
@@ -70,7 +75,7 @@
 #define INET_IPV6_DROP_MEMBERSHIP IPV6_DROP_MEMBERSHIP
 #elif defined(IPV6_LEAVE_GROUP)
 #define INET_IPV6_DROP_MEMBERSHIP IPV6_LEAVE_GROUP
-#elif !__ZEPHYR__
+#elif !CHIP_SYSTEM_CONFIG_USE_PLATFORM_MULTICAST_API
 #error                                                                                                                             \
     "Neither IPV6_DROP_MEMBERSHIP nor IPV6_LEAVE_GROUP are defined which are required for generalized IPv6 multicast group support."
 #endif // IPV6_DROP_MEMBERSHIP
@@ -205,22 +210,6 @@ CHIP_ERROR UDPEndPointImplSockets::BindImpl(IPAddressType addressType, const IPA
         }
     }
 
-#if CHIP_SYSTEM_CONFIG_USE_DISPATCH
-    dispatch_queue_t dispatchQueue = static_cast<System::LayerSocketsLoop *>(&GetSystemLayer())->GetDispatchQueue();
-    if (dispatchQueue != nullptr)
-    {
-        unsigned long fd = static_cast<unsigned long>(mSocket);
-
-        mReadableSource = dispatch_source_create(DISPATCH_SOURCE_TYPE_READ, fd, 0, dispatchQueue);
-        ReturnErrorCodeIf(mReadableSource == nullptr, CHIP_ERROR_NO_MEMORY);
-
-        dispatch_source_set_event_handler(mReadableSource, ^{
-            this->HandlePendingIO(System::SocketEventFlags::kRead);
-        });
-        dispatch_resume(mReadableSource);
-    }
-#endif // CHIP_SYSTEM_CONFIG_USE_DISPATCH
-
     return CHIP_NO_ERROR;
 }
 
@@ -285,6 +274,9 @@ CHIP_ERROR UDPEndPointImplSockets::ListenImpl()
 
 CHIP_ERROR UDPEndPointImplSockets::SendMsgImpl(const IPPacketInfo * aPktInfo, System::PacketBufferHandle && msg)
 {
+    // Ensure packet buffer is not null
+    VerifyOrReturnError(!msg.IsNull(), CHIP_ERROR_INVALID_ARGUMENT);
+
     // Make sure we have the appropriate type of socket based on the
     // destination address.
     ReturnErrorOnFailure(GetSocket(aPktInfo->DestAddress.Type()));
@@ -345,6 +337,7 @@ CHIP_ERROR UDPEndPointImplSockets::SendMsgImpl(const IPPacketInfo * aPktInfo, Sy
         intf = mBoundIntfId;
     }
 
+#if INET_CONFIG_UDP_SOCKET_PKTINFO
     // If the packet should be sent over a specific interface, or with a specific source
     // address, construct an IP_PKTINFO/IPV6_PKTINFO "control message" to that effect
     // add add it to the message header.  If the local OS doesn't support IP_PKTINFO/IPV6_PKTINFO
@@ -409,6 +402,7 @@ CHIP_ERROR UDPEndPointImplSockets::SendMsgImpl(const IPPacketInfo * aPktInfo, Sy
         return CHIP_ERROR_UNSUPPORTED_CHIP_FEATURE;
 #endif // !(defined(IP_PKTINFO) && defined(IPV6_PKTINFO))
     }
+#endif // INET_CONFIG_UDP_SOCKET_PKTINFO
 
     // Send IP packet.
     const ssize_t lenSent = sendmsg(mSocket, &msgHeader, 0);
@@ -431,14 +425,6 @@ void UDPEndPointImplSockets::CloseImpl()
         close(mSocket);
         mSocket = kInvalidSocketFd;
     }
-
-#if CHIP_SYSTEM_CONFIG_USE_DISPATCH
-    if (mReadableSource)
-    {
-        dispatch_source_cancel(mReadableSource);
-        dispatch_release(mReadableSource);
-    }
-#endif // CHIP_SYSTEM_CONFIG_USE_DISPATCH
 }
 
 void UDPEndPointImplSockets::Free()
@@ -581,7 +567,8 @@ void UDPEndPointImplSockets::HandlePendingIO(System::SocketEvents events)
     System::PacketBufferHandle lBuffer;
 
     lPacketInfo.Clear();
-    lPacketInfo.DestPort = mBoundPort;
+    lPacketInfo.DestPort  = mBoundPort;
+    lPacketInfo.Interface = mBoundIntfId;
 
     lBuffer = System::PacketBufferHandle::New(System::PacketBuffer::kMaxSizeWithoutReserve, 0);
 
@@ -753,27 +740,39 @@ exit:
 
 CHIP_ERROR UDPEndPointImplSockets::IPv4JoinLeaveMulticastGroupImpl(InterfaceId aInterfaceId, const IPAddress & aAddress, bool join)
 {
-    IPAddress lInterfaceAddress;
-    bool lInterfaceAddressFound = false;
+    in_addr interfaceAddr;
 
-    for (InterfaceAddressIterator lAddressIterator; lAddressIterator.HasCurrent(); lAddressIterator.Next())
+    if (aInterfaceId.IsPresent())
     {
-        IPAddress lCurrentAddress;
-        if ((lAddressIterator.GetInterfaceId() == aInterfaceId) && (lAddressIterator.GetAddress(lCurrentAddress) == CHIP_NO_ERROR))
+        IPAddress lInterfaceAddress;
+        bool lInterfaceAddressFound = false;
+
+        for (InterfaceAddressIterator lAddressIterator; lAddressIterator.HasCurrent(); lAddressIterator.Next())
         {
-            if (lCurrentAddress.IsIPv4())
+            IPAddress lCurrentAddress;
+            if ((lAddressIterator.GetInterfaceId() == aInterfaceId) &&
+                (lAddressIterator.GetAddress(lCurrentAddress) == CHIP_NO_ERROR))
             {
-                lInterfaceAddressFound = true;
-                lInterfaceAddress      = lCurrentAddress;
-                break;
+                if (lCurrentAddress.IsIPv4())
+                {
+                    lInterfaceAddressFound = true;
+                    lInterfaceAddress      = lCurrentAddress;
+                    break;
+                }
             }
         }
+        VerifyOrReturnError(lInterfaceAddressFound, INET_ERROR_ADDRESS_NOT_FOUND);
+
+        interfaceAddr = lInterfaceAddress.ToIPv4();
     }
-    VerifyOrReturnError(lInterfaceAddressFound, INET_ERROR_ADDRESS_NOT_FOUND);
+    else
+    {
+        interfaceAddr.s_addr = htonl(INADDR_ANY);
+    }
 
     struct ip_mreq lMulticastRequest;
     memset(&lMulticastRequest, 0, sizeof(lMulticastRequest));
-    lMulticastRequest.imr_interface = lInterfaceAddress.ToIPv4();
+    lMulticastRequest.imr_interface = interfaceAddr;
     lMulticastRequest.imr_multiaddr = aAddress.ToIPv4();
 
     const int command = join ? IP_ADD_MEMBERSHIP : IP_DROP_MEMBERSHIP;
@@ -797,6 +796,62 @@ CHIP_ERROR UDPEndPointImplSockets::IPv6JoinLeaveMulticastGroupImpl(InterfaceId a
 #endif // CHIP_SYSTEM_CONFIG_USE_PLATFORM_MULTICAST_API
 
 #ifdef IPV6_MULTICAST_IMPLEMENTED
+    if (!aInterfaceId.IsPresent())
+    {
+        // Do it on all the viable interfaces.
+        bool interfaceFound = false;
+
+        InterfaceIterator interfaceIt;
+        while (interfaceIt.Next())
+        {
+            if (!interfaceIt.SupportsMulticast() || !interfaceIt.IsUp())
+            {
+                continue;
+            }
+
+            InterfaceId interfaceId = interfaceIt.GetInterfaceId();
+
+            IPAddress ifAddr;
+            if (interfaceId.GetLinkLocalAddr(&ifAddr) != CHIP_NO_ERROR)
+            {
+                continue;
+            }
+
+            if (ifAddr.Type() != IPAddressType::kIPv6)
+            {
+                // Not the right sort of interface.
+                continue;
+            }
+
+            interfaceFound = true;
+
+            char ifName[InterfaceId::kMaxIfNameLength];
+            interfaceIt.GetInterfaceName(ifName, sizeof(ifName));
+
+            // Ignore errors here, except for logging, because we expect some of
+            // these interfaces to not work, and some (e.g. loopback) to always
+            // work.
+            CHIP_ERROR err = IPv6JoinLeaveMulticastGroupImpl(interfaceId, aAddress, join);
+            if (err == CHIP_NO_ERROR)
+            {
+                ChipLogDetail(Inet, "  %s multicast group on interface %s", (join ? "Joined" : "Left"), ifName);
+            }
+            else
+            {
+                ChipLogError(Inet, "  Failed to %s multicast group on interface %s", (join ? "join" : "leave"), ifName);
+            }
+        }
+
+        if (interfaceFound)
+        {
+            // Assume we're good.
+            return CHIP_NO_ERROR;
+        }
+
+        // Else go ahead and try to work with the default interface.
+        ChipLogError(Inet, "No valid IPv6 multicast interface found");
+    }
+
     const InterfaceId::PlatformType lIfIndex = aInterfaceId.GetPlatformInterface();
 
     struct ipv6_mreq lMulticastRequest;

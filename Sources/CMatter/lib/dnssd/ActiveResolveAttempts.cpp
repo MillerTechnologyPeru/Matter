@@ -48,9 +48,11 @@ void ActiveResolveAttempts::Complete(const PeerId & peerId)
         }
     }
 
+#if CHIP_MINMDNS_HIGH_VERBOSITY
     // This may happen during boot time adverisements: nodes come online
     // and advertise their IP without any explicit queries for them
     ChipLogProgress(Discovery, "Discovered node without a pending query");
+#endif
 }
 
 void ActiveResolveAttempts::Complete(const chip::Dnssd::DiscoveredNodeData & data)
@@ -72,6 +74,31 @@ void ActiveResolveAttempts::CompleteIpResolution(SerializedQNameIterator targetH
         if (item.attempt.MatchesIpResolve(targetHostName))
         {
             item.attempt.Clear();
+            return;
+        }
+    }
+}
+
+CHIP_ERROR ActiveResolveAttempts::CompleteAllBrowses()
+{
+    for (auto & item : mRetryQueue)
+    {
+        if (item.attempt.IsBrowse())
+        {
+            item.attempt.Clear();
+        }
+    }
+
+    return CHIP_NO_ERROR;
+}
+
+void ActiveResolveAttempts::NodeIdResolutionNoLongerNeeded(const PeerId & peerId)
+{
+    for (auto & item : mRetryQueue)
+    {
+        if (item.attempt.Matches(peerId))
+        {
+            item.attempt.ConsumerRemoved();
             return;
         }
     }
@@ -157,6 +184,7 @@ void ActiveResolveAttempts::MarkPending(ScheduledAttempt && attempt)
         ChipLogError(Discovery, "Re-using pending resolve entry before reply was received.");
     }
 
+    attempt.WillCoalesceWith(entryToUse->attempt);
     entryToUse->attempt        = attempt;
     entryToUse->queryDueTime   = mClock->GetMonotonicTimestamp();
     entryToUse->nextRetryDelay = System::Clock::Seconds16(1);

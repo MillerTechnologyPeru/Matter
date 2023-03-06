@@ -39,7 +39,7 @@ static constexpr EventId Id = 0x00000001;
 } // namespace Events
 } // namespace AccessControl
 
-namespace BridgedActions {
+namespace Actions {
 namespace Events {
 
 namespace StateChanged {
@@ -51,9 +51,9 @@ static constexpr EventId Id = 0x00000001;
 } // namespace ActionFailed
 
 } // namespace Events
-} // namespace BridgedActions
+} // namespace Actions
 
-namespace Basic {
+namespace BasicInformation {
 namespace Events {
 
 namespace StartUp {
@@ -73,7 +73,7 @@ static constexpr EventId Id = 0x00000003;
 } // namespace ReachableChanged
 
 } // namespace Events
-} // namespace Basic
+} // namespace BasicInformation
 
 namespace OtaSoftwareUpdateRequestor {
 namespace Events {
@@ -92,6 +92,24 @@ static constexpr EventId Id = 0x00000002;
 
 } // namespace Events
 } // namespace OtaSoftwareUpdateRequestor
+
+namespace PowerSource {
+namespace Events {
+
+namespace WiredFaultChange {
+static constexpr EventId Id = 0x00000000;
+} // namespace WiredFaultChange
+
+namespace BatFaultChange {
+static constexpr EventId Id = 0x00000001;
+} // namespace BatFaultChange
+
+namespace BatChargeFaultChange {
+static constexpr EventId Id = 0x00000002;
+} // namespace BatChargeFaultChange
+
+} // namespace Events
+} // namespace PowerSource
 
 namespace GeneralDiagnostics {
 namespace Events {
@@ -132,6 +150,10 @@ namespace ConnectionStatus {
 static constexpr EventId Id = 0x00000000;
 } // namespace ConnectionStatus
 
+namespace NetworkFaultChange {
+static constexpr EventId Id = 0x00000001;
+} // namespace NetworkFaultChange
+
 } // namespace Events
 } // namespace ThreadNetworkDiagnostics
 
@@ -153,7 +175,7 @@ static constexpr EventId Id = 0x00000002;
 } // namespace Events
 } // namespace WiFiNetworkDiagnostics
 
-namespace BridgedDeviceBasic {
+namespace BridgedDeviceBasicInformation {
 namespace Events {
 
 namespace StartUp {
@@ -173,7 +195,7 @@ static constexpr EventId Id = 0x00000003;
 } // namespace ReachableChanged
 
 } // namespace Events
-} // namespace BridgedDeviceBasic
+} // namespace BridgedDeviceBasicInformation
 
 namespace Switch {
 namespace Events {
@@ -319,7 +341,7 @@ static constexpr EventId Id = 0x00000010;
 } // namespace Events
 } // namespace PumpConfigurationAndControl
 
-namespace TestCluster {
+namespace UnitTesting {
 namespace Events {
 
 namespace TestEvent {
@@ -331,7 +353,7 @@ static constexpr EventId Id = 0x00000002;
 } // namespace TestFabricScopedEvent
 
 } // namespace Events
-} // namespace TestCluster
+} // namespace UnitTesting
 
 } // namespace Clusters
 } // namespace app

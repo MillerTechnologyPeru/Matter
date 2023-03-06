@@ -31,10 +31,12 @@
 #include <app/ConcreteCommandPath.h>
 #include <app/data-model/Encode.h>
 #include <app/util/attribute-storage.h>
+#include <app/util/config.h>
 #include <platform/CHIPDeviceConfig.h>
 
 using namespace chip;
 using namespace chip::app::Clusters::AudioOutput;
+using chip::Protocols::InteractionModel::Status;
 
 static constexpr size_t kAudioOutputDelegateTableSize =
     EMBER_AF_AUDIO_OUTPUT_CLUSTER_SERVER_ENDPOINT_COUNT + CHIP_DEVICE_CONFIG_DYNAMIC_ENDPOINT_COUNT;
@@ -179,19 +181,30 @@ bool emberAfAudioOutputClusterRenameOutputCallback(app::CommandHandler * command
     Delegate * delegate = GetDelegate(endpoint);
     VerifyOrExit(isDelegateNull(delegate, endpoint) != true, err = CHIP_ERROR_INCORRECT_STATE);
 
-exit:
-    if (HasFeature(endpoint, AudioOutputFeature::kNameUpdates) && err == CHIP_NO_ERROR)
+    if (!HasFeature(endpoint, AudioOutputFeature::kNameUpdates))
     {
-        bool success = delegate->HandleRenameOutput(index, name);
-        Protocols::InteractionModel::Status status =
-            success ? Protocols::InteractionModel::Status::Success : Protocols::InteractionModel::Status::Failure;
-        command->AddStatus(commandPath, status);
+        ChipLogError(Zcl, "AudioOutput no name updates feature");
+        err = CHIP_ERROR_INCORRECT_STATE;
+        ExitNow();
+    }
+
+    Protocols::InteractionModel::Status status;
+
+    if (delegate->HandleRenameOutput(index, name))
+    {
+        status = Protocols::InteractionModel::Status::Success;
     }
     else
     {
-        err != CHIP_NO_ERROR ? ChipLogError(Zcl, "emberAfAudioOutputClusterRenameOutputCallback error: %s", err.AsString())
-                             : ChipLogError(Zcl, "AudioOutput no name updates feature");
+        status = Protocols::InteractionModel::Status::Failure;
+    }
+    command->AddStatus(commandPath, status);
 
+exit:
+
+    if (err != CHIP_NO_ERROR)
+    {
+        ChipLogError(Zcl, "emberAfAudioOutputClusterRenameOutputCallback error: %s", err.AsString());
         command->AddStatus(commandPath, Protocols::InteractionModel::Status::Failure);
     }
 
@@ -203,21 +216,25 @@ bool emberAfAudioOutputClusterSelectOutputCallback(app::CommandHandler * command
 {
     CHIP_ERROR err      = CHIP_NO_ERROR;
     EndpointId endpoint = commandPath.mEndpointId;
+    Status status       = Status::Success;
     auto & index        = commandData.index;
 
     Delegate * delegate = GetDelegate(endpoint);
     VerifyOrExit(isDelegateNull(delegate, endpoint) != true, err = CHIP_ERROR_INCORRECT_STATE);
 
+    if (!delegate->HandleSelectOutput(index))
+    {
+        status = Status::Failure;
+    }
+
 exit:
     if (err != CHIP_NO_ERROR)
     {
         ChipLogError(Zcl, "emberAfAudioOutputClusterSelectOutputCallback error: %s", err.AsString());
-        emberAfSendImmediateDefaultResponse(EMBER_ZCL_STATUS_FAILURE);
+        status = Status::Failure;
     }
 
-    bool success         = delegate->HandleSelectOutput(index);
-    EmberAfStatus status = success ? EMBER_ZCL_STATUS_SUCCESS : EMBER_ZCL_STATUS_FAILURE;
-    emberAfSendImmediateDefaultResponse(status);
+    command->AddStatus(commandPath, status);
     return true;
 }
 
