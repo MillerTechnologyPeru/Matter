@@ -15,8 +15,8 @@ let package = Package(
     ],
     products: [
         .library(
-            name: "Matter",
-            targets: ["Matter"]
+            name: "MatterPackage",
+            targets: ["MatterPackage"]
         ),
         .executable(
             name: "MatterTool",
@@ -31,7 +31,7 @@ let package = Package(
     ],
     targets: [
         .target(
-            name: "Matter",
+            name: "MatterPackage",
             dependencies: [
                 "CMatter",
                 "COpenSSL",
@@ -40,6 +40,7 @@ let package = Package(
                     package: "Bluetooth"
                 ),
             ],
+            path: "Sources/Matter",
             swiftSettings: [
                 .unsafeFlags([
                     "-Xfrontend", "-enable-cxx-interop",
@@ -68,8 +69,7 @@ let package = Package(
                 .headerSearchPath("deps/nlio/include"),
                 .headerSearchPath("app-main"),
                 .unsafeFlags([
-                    "-I", "/opt/homebrew/Cellar/openssl@3/3.0.5/include",
-                    //"-I", "/usr/local/opt/openssl/include",
+                    "-I", "/opt/homebrew/Cellar/openssl@3/3.0.8/include",
                 ], .when(platforms: [.macOS])),
             ]
         ),
@@ -84,13 +84,13 @@ let package = Package(
         .executableTarget(
             name: "MatterTool",
             dependencies: [
-                "Matter",
+                "MatterPackage",
             ]
         ),
         .testTarget(
             name: "MatterTests",
             dependencies: [
-                "Matter",
+                "MatterPackage",
             ]
         ),
     ],

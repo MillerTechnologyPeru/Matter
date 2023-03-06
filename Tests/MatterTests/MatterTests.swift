@@ -1,7 +1,7 @@
 import XCTest
-@testable import Matter
-#if canImport(CHIP)
-import CHIP
+@testable import MatterPackage
+#if canImport(Darwin)
+import Matter
 #endif
 
 final class MatterTests: XCTestCase {
