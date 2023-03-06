@@ -25,13 +25,14 @@
 
 #include <platform/internal/CHIPDeviceLayerInternal.h>
 
-#if __linux__
 #include <app-common/zap-generated/cluster-objects.h>
 #include <ifaddrs.h>
 #include <lib/core/CHIPVendorIdentifiers.hpp>
 #include <lib/support/CodeUtils.h>
 #include <lib/support/logging/CHIPLogging.h>
+#if __linux__
 #include <netpacket/packet.h>
+#endif
 #include <platform/CHIPDeviceConfig.h>
 #include <platform/ConfigurationManager.h>
 #include <platform/DiagnosticDataProvider.h>
@@ -129,6 +130,7 @@ exit:
 
 CHIP_ERROR ConfigurationManagerImpl::GetPrimaryWiFiMACAddress(uint8_t * buf)
 {
+#if __linux__
     struct ifaddrs * addresses = nullptr;
     struct sockaddr_ll * mac   = nullptr;
     CHIP_ERROR error           = CHIP_NO_ERROR;
@@ -172,6 +174,9 @@ CHIP_ERROR ConfigurationManagerImpl::GetPrimaryWiFiMACAddress(uint8_t * buf)
 
 exit:
     return error;
+#else
+    return CHIP_ERROR_NOT_IMPLEMENTED;
+#endif
 }
 
 bool ConfigurationManagerImpl::CanFactoryReset()
@@ -426,4 +431,4 @@ ConfigurationManager & ConfigurationMgrImpl()
 
 } // namespace DeviceLayer
 } // namespace chip
-#endif
+//#endif

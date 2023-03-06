@@ -23,7 +23,7 @@
 #include <string>
 #include <vector>
 
-#include <Network/Network.h>
+#import <Network/Network.h>
 
 namespace chip {
 namespace Dnssd {

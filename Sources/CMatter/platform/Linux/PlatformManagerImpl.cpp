@@ -167,7 +167,7 @@ CHIP_ERROR PlatformManagerImpl::PrepareCommissioning()
     auto error = CHIP_NO_ERROR;
 #if CONFIG_NETWORK_LAYER_BLE
     // FIXME: BLE PrepareConnection()
-    //error = Internal::BLEMgrImpl().PrepareConnection();
+    error = Internal::BLEMgrImpl().PrepareConnection();
 #endif // CONFIG_NETWORK_LAYER_BLE
     return error;
 }
