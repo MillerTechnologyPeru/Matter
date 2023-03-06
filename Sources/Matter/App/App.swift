@@ -7,6 +7,9 @@
 
 import Foundation
 @_implementationOnly import CMatter
+#if canImport(Network)
+import Network
+#endif
 
 public protocol MatterApp {
     

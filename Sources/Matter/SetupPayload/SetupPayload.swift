@@ -20,7 +20,7 @@ public struct SetupPayload: Equatable, Hashable, Codable {
     
     public var rendezvousInformation: RendezvousInformationFlags?
     
-    public var discriminator: UInt16
+    public var discriminator: SetupDiscriminator
     
     public var setupPinCode: UInt32
     
@@ -33,7 +33,7 @@ public struct SetupPayload: Equatable, Hashable, Codable {
          productID: UInt16,
          commissioningFlow: CommissioningFlow = .standard,
          rendezvousInformation: RendezvousInformationFlags?,
-         discriminator: UInt16,
+         discriminator: SetupDiscriminator,
          setupPinCode: UInt32,
          serialNumber: String? = nil,
          vendorData: [QRCodeInfo] = []
@@ -93,17 +93,13 @@ extension SetupPayload: ReferenceConvertible {
         }
         
         var rendezvousInformation: RendezvousInformationFlags? {
-            get { cxxObject.rendezvousInformation.HasValue() ? .init(cxxObject.rendezvousInformation.Value().pointee) : nil }
-            set { cxxObject.rendezvousInformation = newValue.flatMap { .init(.init(.init($0))) } ?? .Missing() }
+            get { cxxObject.rendezvousInformation.HasValue() ? .init(rawValue: cxxObject.rendezvousInformation.Value().pointee.Raw()) : nil }
+            set { cxxObject.rendezvousInformation = newValue.flatMap { .init(.init(.init(chip.RendezvousInformationFlag.init(rawValue: $0.rawValue)!))) } ?? .Missing() }
         }
         
-        var discriminator: UInt16 {
-            get { cxxObject.discriminator.longValue }
-            set {
-                var descriminator = chip.SetupDiscriminator()
-                descriminator.SetLongValue(newValue)
-                cxxObject.discriminator = descriminator
-            }
+        var discriminator: SetupDiscriminator {
+            get { .init(cxxObject.discriminator) }
+            set { cxxObject.discriminator = .init(newValue) }
         }
         
         var setupPinCode: UInt32 {
@@ -211,12 +207,8 @@ internal extension chip.PayloadContents {
             vendorID: value.vendorID,
             productID: value.productID,
             commissioningFlow: .init(value.commissioningFlow),
-            rendezvousInformation: value.rendezvousInformation.flatMap { .init(.init(.init($0))) } ?? .Missing(),
-            discriminator: {
-                var descriminator = chip.SetupDiscriminator()
-                descriminator.SetLongValue(value.discriminator)
-                return descriminator
-            }(),
+            rendezvousInformation: value.rendezvousInformation.flatMap { .init(.init(.init(chip.RendezvousInformationFlag.init(rawValue: $0.rawValue)!))) } ?? .Missing(),
+            discriminator: .init(value.discriminator),
             setUpPINCode: value.setupPinCode
         )
     }

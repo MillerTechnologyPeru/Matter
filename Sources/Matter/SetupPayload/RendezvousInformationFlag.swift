@@ -32,17 +32,3 @@ public extension RendezvousInformationFlags {
     /// Device supports Setup on network
     static var onNetwork: RendezvousInformationFlags     { RendezvousInformationFlags(0x04) }
 }
-
-internal extension chip.RendezvousInformationFlags {
-    
-    init(_ flags: RendezvousInformationFlags) {
-        self.init(flags.rawValue)
-    }
-}
-
-internal extension RendezvousInformationFlags {
-    
-    init(_ flags: chip.RendezvousInformationFlags) {
-        self.init(rawValue: flags.Raw())
-    }
-}

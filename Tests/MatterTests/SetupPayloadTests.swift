@@ -15,21 +15,21 @@ import Matter
 final class SetupPayloadTests: XCTestCase {
     
     func testQRCodeParser() throws {
-        let base38String = "MT:R5L90MP500K64J00000"
+        let base38String = "MT:M5L90MP500K64J00000"
         let payload = try SetupPayload(qrCode: base38String)
-        XCTAssertEqual(payload.version, 5)
-        XCTAssertEqual(payload.discriminator, 128)
+        XCTAssertEqual(payload.discriminator, .short(128))
         XCTAssertEqual(payload.setupPinCode, 2048)
         XCTAssertEqual(payload.vendorID, 12)
         XCTAssertEqual(payload.productID, 1)
         XCTAssertEqual(payload.commissioningFlow, .standard)
+        XCTAssertEqual(payload.version, 0)
         XCTAssertEqual(payload.rendezvousInformation, [.softAP])
         XCTAssertEqual(try payload.generateQRCode(), base38String)
         
         #if canImport(Darwin)
         let chipPayload = try MTRQRCodeSetupPayloadParser(base38Representation: base38String).populatePayload()
         XCTAssertEqual(chipPayload.version.uint8Value, payload.version)
-        XCTAssertEqual(chipPayload.discriminator.uint16Value, payload.discriminator)
+        XCTAssertEqual(.long(chipPayload.discriminator.uint16Value), payload.discriminator)
         XCTAssertEqual(chipPayload.setUpPINCode.uint32Value, payload.setupPinCode)
         XCTAssertEqual(chipPayload.vendorID.uint16Value, payload.vendorID)
         XCTAssertEqual(chipPayload.productID.uint16Value, payload.productID)
@@ -42,7 +42,7 @@ final class SetupPayloadTests: XCTestCase {
         let base38String = "MT:R5L90MP500K64J0A33P0SET70.QT52B.E23-WZE0WISA0DK5N1K8SQ1RYCU1O0"
         let payload = try SetupPayload(qrCode: base38String)
         XCTAssertEqual(payload.version, 5)
-        XCTAssertEqual(payload.discriminator, 128)
+        XCTAssertEqual(payload.discriminator, .long(128))
         XCTAssertEqual(payload.setupPinCode, 2048)
         XCTAssertEqual(payload.vendorID, 12)
         XCTAssertEqual(payload.productID, 1)
@@ -76,23 +76,23 @@ final class SetupPayloadTests: XCTestCase {
         let string = "636108753500001000015"
         let payload = try SetupPayload(manual: string)
         XCTAssertEqual(payload.version, 0)
-        XCTAssertEqual(payload.discriminator, 2560)
+        XCTAssertEqual(payload.discriminator, .short(0x0A))
         XCTAssertEqual(payload.setupPinCode, 123456780)
         XCTAssertEqual(payload.vendorID, 1)
         XCTAssertEqual(payload.productID, 1)
         XCTAssertEqual(payload.commissioningFlow, .custom)
-        XCTAssertEqual(payload.rendezvousInformation, [])
+        XCTAssertEqual(payload.rendezvousInformation, nil)
         XCTAssertEqual(try payload.generateManualCode(), string)
         
         #if canImport(Darwin)
         let chipPayload = try MTRManualSetupPayloadParser(decimalStringRepresentation: string).populatePayload()
         XCTAssertEqual(chipPayload.version.uint8Value, payload.version)
-        //XCTAssertEqual(chipPayload.discriminator.uint16Value, payload.discriminator)
+        XCTAssertEqual(.short(chipPayload.discriminator.uint8Value), payload.discriminator)
         XCTAssertEqual(chipPayload.setUpPINCode.uint32Value, payload.setupPinCode)
         XCTAssertEqual(chipPayload.vendorID.uint16Value, payload.vendorID)
         XCTAssertEqual(chipPayload.productID.uint16Value, payload.productID)
         XCTAssertEqual(chipPayload.commissioningFlow.rawValue, numericCast(payload.commissioningFlow.rawValue))
-        //XCTAssertEqual(chipPayload.rendezvousInformation?.uint8Value, payload.rendezvousInformation.rawValue)
+        XCTAssertEqual(chipPayload.rendezvousInformation?.uint8Value, payload.rendezvousInformation?.rawValue)
         #endif
     }
     
