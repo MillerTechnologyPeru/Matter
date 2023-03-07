@@ -48,7 +48,7 @@ public final class NetServiceManager: ServiceDiscoveryManager {
     ) async throws {
         let (object, publish) = await storage.update {
             let netService = NetService(
-                domain: "local",
+                domain: "local.",
                 type: service.type + service.protocol.stringValue,
                 name: service.name,
                 port: Int32(service.port)
@@ -128,11 +128,11 @@ extension NetServiceManager {
         }
         
         func netServiceWillPublish(_ sender: NetService) {
-            log("Will publish \(sender.domain).\(sender.type):\(sender.name)")
+            log("Will publish \(sender.domain) \(sender.type) \(sender.name)")
         }
         
         func netServiceDidPublish(_ sender: NetService) {
-            log("Did publish \(sender.domain).\(sender.type):\(sender.name)")
+            log("Did publish \(sender.domain) \(sender.type) \(sender.name)")
             let object = ObjectIdentifier(sender)
             Task {
                 await manager.storage.update {
@@ -143,7 +143,7 @@ extension NetServiceManager {
         }
         
         func netService(_ sender: NetService, didNotPublish errorDict: [String : NSNumber]) {
-            log("Did not publish \(sender.domain).\(sender.type):\(sender.name)")
+            log("Did not publish \(sender.domain) \(sender.type) \(sender.name)")
             let error = NetServiceManager.Error.publish(errorDict)
             let object = ObjectIdentifier(sender)
             Task {

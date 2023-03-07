@@ -18,9 +18,9 @@ public extension ServiceDiscoveryProtocol {
     var stringValue: String {
         switch self {
         case .udp:
-            return "._tcp"
+            return "._tcp."
         case .tcp:
-            return "._udp"
+            return "._udp."
         }
     }
 }
