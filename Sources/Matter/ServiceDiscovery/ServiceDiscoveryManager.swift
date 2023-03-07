@@ -44,7 +44,7 @@ public final class NetServiceManager: ServiceDiscoveryManager {
             let txtRecord = NetService.data(fromTXTRecord: service.txtRecord)
             netService.setTXTRecord(txtRecord)
             netService.delegate = delegate
-            $0.services.insert(netService)
+            $0.services.append(netService)
             let publish = { netService.publish() }
             let object = ObjectIdentifier(netService)
             return (object, publish)
@@ -85,7 +85,7 @@ internal extension NetServiceManager {
         
         var continuation = Continuation()
         
-        var services = Set<NetService>()
+        var services = [NetService]()
     }
     
     struct Continuation {
