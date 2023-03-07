@@ -24,9 +24,9 @@ public final class NetServiceManager: NSObject, ServiceDiscoveryManager {
         service: ServiceDiscoveryService
     ) async throws {
         let netService = NetService(
-            domain: service.domain,
-            type: service.type,
-            name: service.type,
+            domain: "local",
+            type: service.type + service.protocol.stringValue,
+            name: service.name,
             port: Int32(service.port)
         )
         let txtRecord = NetService.data(fromTXTRecord: service.txtRecord)
@@ -64,25 +64,17 @@ internal func CHIPDNSSDPublishService(
 ) -> UInt32 {
     let service = ServiceDiscoveryService(&chipService)
     let manager = MatterAppCache.app.serviceDiscovery
+    print(service)
     Task {
-        try await manager.publish(service: service)
-        callback(context, service.type, service.name, .none)
-    }
-    /*
-    Task {
-        let matterError: MatterError
+        let matterError: MatterError.CXXObject
         do {
             try await manager.publish(service: service)
             matterError = .none
+        } catch {
+            matterError = .none
+            print(error)
         }
-        catch let error is MatterError {
-            matterError = error
-        }
-        catch {
-            matterError = .init(sdk: .application, code: 0)
-        }
-        //let chipError = MatterError.CXXObject(matterError)
-        //callback(chipError)
-    }*/
+        callback(context, service.type, service.name, matterError)
+    }
     return 0
 }

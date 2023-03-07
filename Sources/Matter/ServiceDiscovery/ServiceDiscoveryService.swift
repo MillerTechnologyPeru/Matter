@@ -10,13 +10,15 @@ import Foundation
 
 public struct ServiceDiscoveryService: Equatable, Hashable {
     
-    public let domain: String
+    public let hostName: String
     
     public let type: String
     
     public let name: String
     
     public let port: UInt16
+    
+    public let `protocol`: ServiceDiscoveryProtocol
     
     public let ttlSeconds: UInt32
     
@@ -33,10 +35,11 @@ internal extension ServiceDiscoveryService {
             String(cString: $0.assumingMemoryBound(to: UInt8.self).baseAddress!)
         }
         self.port = service.mPort
-        self.domain = withUnsafeBytes(of: &service.mHostName) {
+        self.hostName = withUnsafeBytes(of: &service.mHostName) {
             String(cString: $0.assumingMemoryBound(to: UInt8.self).baseAddress!)
         }
         self.ttlSeconds = service.mTtlSeconds
+        self.protocol = .init(rawValue: service.mProtocol.rawValue)!
         var records = [String: Data]()
         records.reserveCapacity(service.mTextEntrySize)
         for i in 0 ..< service.mTextEntrySize {
