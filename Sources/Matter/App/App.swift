@@ -31,13 +31,6 @@ extension MatterApp {
         // store Swift singleton
         MatterAppCache.app = self
         
-        // set C++ singletons
-        var deviceInfo = chip.DeviceLayer.DeviceInstanceInfoProviderImpl()
-        let setDeviceInstanceInfoProvider = unsafeBitCast(chip.DeviceLayer.SetDeviceInstanceInfoProvider, to: ((UnsafeMutablePointer<chip.DeviceLayer.DeviceInstanceInfoProviderImpl>?) -> Void).self)
-        setDeviceInstanceInfoProvider(&deviceInfo)
-        
-        CHIPSetDiagnosticDataProviderImpl()
-        
         // start main loop
         main_chip_app(CommandLine.argc, CommandLine.unsafeArgv)
     }

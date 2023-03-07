@@ -23,6 +23,18 @@ public final class NetServiceManager: ServiceDiscoveryManager {
         self.log = { print($0) }
         #endif
         let _ = self.delegate
+        
+        #if !canImport(NetService)
+         // run loop
+        Task.detached { [weak self] in
+            while self != nil {
+                await MainActor.run {
+                    RunLoop.main.run(until: Date() + 0.1)
+                }
+                try? await Task.sleep(nanoseconds: 1_000_000)
+            }
+        }
+        #endif
     }
     
     public var log: ((String) -> ())?
@@ -45,7 +57,12 @@ public final class NetServiceManager: ServiceDiscoveryManager {
             netService.setTXTRecord(txtRecord)
             netService.delegate = delegate
             $0.services.append(netService)
-            let publish = { netService.publish() }
+            let publish = {
+                #if canImport(Darwin)
+                netService.schedule(in: RunLoop.main, forMode: .default)
+                #endif
+                netService.publish()
+            }
             let object = ObjectIdentifier(netService)
             return (object, publish)
         }
@@ -161,7 +178,6 @@ internal func CHIPDNSSDPublishService(
 ) -> UInt32 {
     let service = ServiceDiscoveryService(&chipService)
     let manager = MatterAppCache.app.serviceDiscovery
-    print(service)
     Task {
         let matterError: MatterError.CXXObject
         do {

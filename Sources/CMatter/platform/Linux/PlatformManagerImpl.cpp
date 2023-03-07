@@ -75,66 +75,24 @@ exit:
 
 CHIP_ERROR PlatformManagerImpl::_StartEventLoopTask()
 {
-    if (mIsWorkQueueSuspended)
-    {
-        mIsWorkQueueSuspended = false;
-        dispatch_resume(mWorkQueue);
-    }
-
+    //CFRunLoopRun();
     return CHIP_NO_ERROR;
 };
 
 CHIP_ERROR PlatformManagerImpl::_StopEventLoopTask()
 {
-    if (!mIsWorkQueueSuspended && !mIsWorkQueueSuspensionPending)
-    {
-        mIsWorkQueueSuspensionPending = true;
-        if (dispatch_get_current_queue() != mWorkQueue)
-        {
-            // dispatch_sync is used in order to guarantee serialization of the caller with
-            // respect to any tasks that might already be on the queue, or running.
-            dispatch_sync(mWorkQueue, ^{
-                dispatch_suspend(mWorkQueue);
-            });
-
-            mIsWorkQueueSuspended         = true;
-            mIsWorkQueueSuspensionPending = false;
-        }
-        else
-        {
-            // We are called from a task running on our work queue.  Dispatch async,
-            // so we don't deadlock ourselves.  Note that we do have to dispatch to
-            // guarantee that we don't signal the semaphore until we have ensured
-            // that no more tasks will run on the queue.
-            dispatch_async(mWorkQueue, ^{
-                dispatch_suspend(mWorkQueue);
-                mIsWorkQueueSuspended         = true;
-                mIsWorkQueueSuspensionPending = false;
-                dispatch_semaphore_signal(mRunLoopSem);
-            });
-        }
-    }
-
+    //CFRunLoopStop(CFRunLoopGetMain());
     return CHIP_NO_ERROR;
 }
 
 void PlatformManagerImpl::_RunEventLoop()
 {
-    mRunLoopSem = dispatch_semaphore_create(0);
-
-    _StartEventLoopTask();
-
-    //
-    // Block on the semaphore till we're signalled to stop by
-    // _StopEventLoopTask()
-    //
-    dispatch_semaphore_wait(mRunLoopSem, DISPATCH_TIME_FOREVER);
-    dispatch_release(mRunLoopSem);
-    mRunLoopSem = nullptr;
+    CFRunLoopRun();
 }
 
 void PlatformManagerImpl::_Shutdown()
 {
+    CFRunLoopStop(CFRunLoopGetMain());
     // Call up to the base class _Shutdown() to perform the bulk of the shutdown.
     GenericPlatformManagerImpl<ImplClass>::_Shutdown();
 }
