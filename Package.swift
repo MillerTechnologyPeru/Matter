@@ -43,6 +43,7 @@ let package = Package(
             dependencies: [
                 "CMatter",
                 "COpenSSL",
+                "CAvahi",
                 .product(
                     name: "Bluetooth",
                     package: "Bluetooth"
@@ -101,6 +102,14 @@ let package = Package(
             providers: [
                 .brew(["openssl"]),
                 .apt(["openssl libssl-dev"]),
+            ]
+        ),
+        .systemLibrary(
+            name: "CAvahi",
+            pkgConfig: "avahi-client",
+            providers: [
+                .brew(["avahi"]),
+                .apt(["libavahi-client-dev"]),
             ]
         ),
         .executableTarget(

@@ -1,0 +1,4 @@
+module CAvahi [system] {
+    header "avahi-client/client.h"
+    export *
+}
