@@ -30,6 +30,7 @@
 // App
 #include <app/App.h>
 #include <app/AppDiagnosticDataProvider.h>
+#include <app/AppDNSSD.h>
 
 // Platform
 #include <platform/DeviceInstanceInfoProvider.h>

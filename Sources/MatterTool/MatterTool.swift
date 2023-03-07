@@ -7,6 +7,9 @@
 
 import Foundation
 import MatterPackage
+#if canImport(NetService)
+import NetService
+#endif
 
 @main
 struct MatterTool: MatterApp {
@@ -21,6 +24,8 @@ struct MatterTool: MatterApp {
         manufacturingDate: (year: 2022, month: 0, day: 1),
         hardwareVersion: 0x01
     )
+    
+    static let serviceDiscovery = NetServiceManager()
 }
 
 struct AppConfiguration: ConfigurationManager {

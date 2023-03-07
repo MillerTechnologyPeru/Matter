@@ -7,10 +7,8 @@
 
 import Foundation
 @_implementationOnly import CMatter
-#if canImport(Network)
-import Network
-#endif
 
+/// Matter Application Protocol
 public protocol MatterApp {
     
     associatedtype Configuration: ConfigurationManager
@@ -21,7 +19,9 @@ public protocol MatterApp {
     
     static var deviceInfo: DeviceInfo { get }
     
-    //static func main()
+    associatedtype ServiceDiscovery: ServiceDiscoveryManager
+    
+    static var serviceDiscovery: ServiceDiscovery { get }
 }
 
 extension MatterApp {

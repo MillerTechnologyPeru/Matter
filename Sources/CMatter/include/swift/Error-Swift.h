@@ -14,3 +14,10 @@ __attribute__((swift_name("MatterError.isEqual(self:_:)")))
 {
     return error == other;
 }
+/*
+static inline MatterError MatterErrorCreate(uint32_t code)
+__attribute__((swift_name("MatterError.init(code:)")))
+{
+    return MatterError(code);
+}
+*/

@@ -27,6 +27,14 @@ let package = Package(
         .package(
             url: "https://github.com/PureSwift/Bluetooth.git",
             .upToNextMajor(from: "6.0.0")
+        ),
+        .package(
+            url: "https://github.com/PureSwift/GATT.git",
+            branch: "master"
+        ),
+        .package(
+            url: "https://github.com/Bouke/NetService.git",
+            from: "0.8.1"
         )
     ],
     targets: [
@@ -38,6 +46,15 @@ let package = Package(
                 .product(
                     name: "Bluetooth",
                     package: "Bluetooth"
+                ),
+                .product(
+                    name: "GATT",
+                    package: "GATT"
+                ),
+                .product(
+                    name: "NetService",
+                    package: "NetService",
+                    condition: .when(platforms: [.linux])
                 ),
             ],
             path: "Sources/Matter",
@@ -71,6 +88,9 @@ let package = Package(
                 .unsafeFlags([
                     "-I", "/opt/homebrew/Cellar/openssl@3/3.0.8/include",
                 ], .when(platforms: [.macOS])),
+                .unsafeFlags([
+                    "-I", "/usr/lib/swift",
+                ], .when(platforms: [.linux])),
             ]
         ),
         .systemLibrary(

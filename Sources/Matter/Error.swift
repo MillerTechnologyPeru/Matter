@@ -79,6 +79,19 @@ public struct MatterError: Error, Equatable, Hashable {
     }
 }
 
+internal extension MatterError.CXXObject {
+    
+    init(_ error: MatterError) {
+        //self.init(code: error.code.rawValue)
+        assertionFailure("Not implemented")
+        self.init(.application, 0)
+    }
+    
+    static var none: MatterError.CXXObject {
+        self.init(.core, 0)
+    }
+}
+
 internal extension MatterError {
     
     static var none: MatterError {
@@ -112,7 +125,9 @@ internal extension CHIP_ERROR {
         line: UInt = #line
     ) throws {
         guard self.AsInteger() == 0 else {
+            #if DEBUG
             NSLog("\(file):\(line):\(function) Matter error 0x\(String(self.AsInteger(), radix: 16))")
+            #endif
             throw MatterError(self)
         }
     }
@@ -218,7 +233,7 @@ public enum MatterErrorRange: UInt8, CaseIterable {
     case lwIP           = 0x3
     
     /// Encapsulated OpenThread errors.
-    case cpenThread     = 0x4
+    case openThread     = 0x4
     
     /// Platform-defined encapsulation.
     case platform       = 0x5
