@@ -90,6 +90,8 @@ let package = Package(
                 ], .when(platforms: [.macOS])),
                 .unsafeFlags([
                     "-I", "/usr/lib/swift",
+                    "-I", "/usr/local/lib/swift",
+                    "-I", "/usr/libexec/swift/lib/swift",
                 ], .when(platforms: [.linux])),
             ]
         ),
